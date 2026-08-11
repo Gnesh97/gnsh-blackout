@@ -1,0 +1,11 @@
+# Local tooling and agent metadata
+.c*/
+.a*/
+
+# Runtime and local environment files
+*.log
+*.tmp
+*.bak
+.env
+.env.*
+!.env.example
