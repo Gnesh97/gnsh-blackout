@@ -45,6 +45,11 @@ VisualManager = {}
 local ASSET_ID = 'native_blackout'
 local heldByDistrict = nil
 local heldByProfile = nil
+local holdsNativeAsset = false
+
+local function nativeBlackoutEnabled(profile)
+    return not profile.nativeBlackout or profile.nativeBlackout.enabled ~= false
+end
 
 local function safeHybridApply(profile, enabled)
     if not profile or profile.mode ~= Constants.VisualMode.HYBRID then return end
@@ -67,10 +72,17 @@ end
 
 local function releaseCurrentHold(instant, preserveNative)
     if not heldByDistrict then return end
-    local shouldRemove = VisualOwnership.Release(ASSET_ID, heldByDistrict)
+    local hadNativeHold = holdsNativeAsset
+    local shouldRemove = hadNativeHold and VisualOwnership.Release(ASSET_ID, heldByDistrict) or false
     local profile = heldByProfile
     heldByDistrict = nil
     heldByProfile = nil
+    holdsNativeAsset = false
+
+    if not hadNativeHold then
+        safeHybridApply(profile, false)
+        return
+    end
 
     if not shouldRemove or preserveNative then return end
 
@@ -88,10 +100,19 @@ local function releaseCurrentHold(instant, preserveNative)
 end
 
 local function acquireHold(districtId, profile, instant)
-    local shouldApply = VisualOwnership.Acquire(ASSET_ID, districtId)
     heldByDistrict = districtId
     heldByProfile = profile
 
+    if not nativeBlackoutEnabled(profile) then
+        -- Native asset is disabled for this profile. Do not register a
+        -- native ownership entry; hybrid adapters still need lifecycle calls.
+        holdsNativeAsset = false
+        safeHybridApply(profile, true)
+        return
+    end
+
+    holdsNativeAsset = true
+    local shouldApply = VisualOwnership.Acquire(ASSET_ID, districtId)
     if not shouldApply then return end
 
     safeHybridApply(profile, true)
@@ -142,7 +163,10 @@ AddEventHandler('infra:powerStateChanged', function(state)
         -- Native blackout is one shared client asset. When entering another
         -- blackout district, transfer ownership without removing the asset
         -- in between; otherwise ForceSync(false) creates a visible flash.
-        releaseCurrentHold(instant, not powered)
+        -- Preserve the shared native effect only when the destination profile
+        -- actually needs it. Otherwise an unpowered district with native
+        -- blackout disabled would inherit the previous district's effect.
+        releaseCurrentHold(instant, not powered and nativeBlackoutEnabled(profile))
     end
 
     ClientState.CurrentDistrict = districtId
@@ -176,6 +200,7 @@ function VisualManager.Reset()
     Transition.Cancel()
     heldByDistrict = nil
     heldByProfile = nil
+    holdsNativeAsset = false
     NativeBlackout.Reset()
     if VisualHybrid and VisualHybrid.Reset then pcall(VisualHybrid.Reset) end
     VisualOwnership.Reset()

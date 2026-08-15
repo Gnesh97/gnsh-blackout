@@ -25,9 +25,12 @@ end
 
 local function printApiQueryResult(source, value, err)
     if err then
-        local message = '[gnsh-blackout] API error: ' .. tostring(err)
+        local message = ('[gnsh-blackout] API error source=%s: %s'):format(tostring(source), tostring(err))
         print(message)
-        if source ~= 0 then Bridge.Notify(source, tostring(err), 'error') end
+        if source ~= 0 then
+            TriggerClientEvent('gnsh-blackout:client:apiQueryResult', source, nil, tostring(err))
+            Bridge.Notify(source, tostring(err), 'error')
+        end
         return
     end
 
@@ -37,8 +40,9 @@ local function printApiQueryResult(source, value, err)
         encoded = ok and result or nil
     end
     encoded = encoded or tostring(value)
-    print('[gnsh-blackout] API result: ' .. encoded)
+    print(('[gnsh-blackout] API result source=%s: %s'):format(tostring(source), encoded))
     if source ~= 0 then
+        TriggerClientEvent('gnsh-blackout:client:apiQueryResult', source, encoded)
         Bridge.Notify(source, 'API sonucu server konsoluna yazıldı.', 'info')
     end
 end
@@ -472,11 +476,15 @@ local function printInfrastructurePoint(point)
     end
 
     local coords = point.coords
-    print(('[gnsh-blackout] %s type=%s enabled=%s coords=(%.1f, %.1f, %.1f) heading=%.1f %s'):format(
+    local coordsText = coords
+        and ('(%.1f, %.1f, %.1f)'):format(coords.x, coords.y, coords.z)
+        or 'UNVERIFIED'
+    print(('[gnsh-blackout] %s type=%s physical=%s enabled=%s coords=%s heading=%.1f %s'):format(
         point.logicalId,
         point.type,
+        tostring(point.physical),
         tostring(point.enabled),
-        coords.x, coords.y, coords.z,
+        coordsText,
         point.heading or 0.0,
         stateText
     ))

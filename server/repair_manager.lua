@@ -60,10 +60,38 @@ local function hasAllMaterials(source, materials)
     return true
 end
 
-local function consumeMaterials(source, materials)
-    for _, m in ipairs(materials) do
-        Bridge.RemoveItem(source, m.item, m.amount)
+local function refundMaterials(source, materials)
+    local refunded = true
+    for _, m in ipairs(materials or {}) do
+        local ok, added = pcall(Bridge.AddItem, source, m.item, m.amount)
+        if not ok or added ~= true then
+            refunded = false
+            Log.warn('repair material refund failed', {
+                player = source,
+                item = m.item,
+                amount = m.amount,
+                error = ok and 'adapter_rejected' or tostring(added),
+            })
+        end
     end
+    return refunded
+end
+
+local function consumeMaterials(source, materials)
+    local removedItems = {}
+    for _, m in ipairs(materials) do
+        local ok, removed, reason = pcall(Bridge.RemoveItem, source, m.item, m.amount)
+        if not ok or removed ~= true then
+            local rollbackOk = refundMaterials(source, removedItems)
+            local failureReason = reason or (ok and 'item_remove_failed' or tostring(removed))
+            if not rollbackOk then
+                failureReason = failureReason .. ':item_rollback_failed'
+            end
+            return false, m.item, failureReason
+        end
+        removedItems[#removedItems + 1] = m
+    end
+    return true
 end
 
 local function repairDistance(point)
@@ -213,6 +241,7 @@ function RepairManager.StartRepair(source, transformerId)
     activeRepairs[transformerId] = {
         source = source,
         plan = plan,
+        originalDamage = trState.damage,
         stageIndex = firstPending,
         incidentId = activeIncident and activeIncident.incidentId or nil,
         doneStages = doneStages,
@@ -246,9 +275,9 @@ function RepairManager.AdvanceStage(transformerId)
     })
 
     if not sessionId then
+        RepairManager.CancelRepair(transformerId, 'REPAIR_SESSION_START_FAILED')
         Bridge.Notify(repair.source, err or 'Tamir oturumu başlatılamadı.', 'error')
         Log.event(Constants.LogEvent.REPAIR_FAILED, { player = repair.source, target = transformerId, stage = stageName, reason = err })
-        activeRepairs[transformerId] = nil
         return
     end
 
@@ -260,18 +289,68 @@ end
 function RepairManager.CompleteRepair(transformerId)
     local repair = activeRepairs[transformerId]
     if not repair then return end
-    activeRepairs[transformerId] = nil
 
+    local materialsConsumed = false
     if Config.Repair.requireItem then
-        consumeMaterials(repair.source, repair.plan.materials)
+        local hasMaterials, missingItem = hasAllMaterials(repair.source, repair.plan.materials)
+        if not hasMaterials then
+            RepairManager.CancelRepair(transformerId, 'REPAIR_MATERIALS_MISSING')
+            Bridge.Notify(repair.source, ('Gerekli malzeme eksik: %s'):format(missingItem), 'error')
+            return
+        end
+
+        local consumed, failedItem, removeError = consumeMaterials(repair.source, repair.plan.materials)
+        if not consumed then
+            RepairManager.CancelRepair(transformerId, 'REPAIR_MATERIALS_REMOVE_FAILED')
+            Log.event(Constants.LogEvent.REPAIR_FAILED, {
+                player = repair.source,
+                target = transformerId,
+                reason = 'item_remove_failed:' .. tostring(removeError),
+                item = failedItem,
+            })
+            Bridge.Notify(repair.source, 'Tamir malzemeleri envanterden düşürülemedi, işlem iptal edildi.', 'error')
+            return
+        end
+        materialsConsumed = true
     end
 
     -- REPAIRING -> RECOVERING (legal edge). Damage cleared now (materials
     -- have genuinely been spent) but the transformer doesn't reach ONLINE
     -- until the recovery delay below — that's the ONLINE hook's job, and
     -- it's what auto-resolves the incident.
-    TransformerManager.SetState(transformerId, Constants.TransformerState.RECOVERING, 'REPAIR_COMPLETE')
-    TransformerManager.SetDamage(transformerId, 0, 'REPAIR_COMPLETE')
+    local stateChanged, stateError = TransformerManager.SetState(
+        transformerId,
+        Constants.TransformerState.RECOVERING,
+        'REPAIR_COMPLETE'
+    )
+    if not stateChanged then
+        if materialsConsumed then refundMaterials(repair.source, repair.plan.materials) end
+        RepairManager.CancelRepair(transformerId, 'REPAIR_STATE_TRANSITION_FAILED')
+        Bridge.Notify(repair.source, 'Tamir durumu güncellenemedi, işlem iptal edildi.', 'error')
+        Log.event(Constants.LogEvent.REPAIR_FAILED, {
+            player = repair.source,
+            target = transformerId,
+            reason = 'state_transition_failed:' .. tostring(stateError),
+        })
+        return
+    end
+
+    local damageCleared, damageError = TransformerManager.SetDamage(transformerId, 0, 'REPAIR_COMPLETE')
+    if not damageCleared then
+        if materialsConsumed then refundMaterials(repair.source, repair.plan.materials) end
+        TransformerManager.SetState(transformerId, Constants.TransformerState.OFFLINE, 'REPAIR_ROLLBACK', { force = true })
+        RepairManager.CancelRepair(transformerId, 'REPAIR_DAMAGE_RESET_FAILED')
+        Bridge.Notify(repair.source, 'Tamir hasarı sıfırlanamadı, işlem iptal edildi.', 'error')
+        Log.event(Constants.LogEvent.REPAIR_FAILED, {
+            player = repair.source,
+            target = transformerId,
+            reason = 'damage_reset_failed:' .. tostring(damageError),
+        })
+        return
+    end
+
+    local originalDamage = repair.originalDamage
+    activeRepairs[transformerId] = nil
 
     Bridge.Notify(repair.source, 'Tamir tamamlandı, sistem yeniden başlatılıyor...', 'success')
 
@@ -280,7 +359,51 @@ function RepairManager.CompleteRepair(transformerId)
         -- RECOVERING -> ONLINE (legal edge) — fires transformer_manager's
         -- existing ONLINE hook (auto-resolves the incident) and Replication's
         -- grid recalculation. Nothing new needed in either of those modules.
-        TransformerManager.SetState(transformerId, Constants.TransformerState.ONLINE, 'REPAIR_COMPLETE')
+        local current = TransformerManager.GetState(transformerId)
+        if current and current.state == Constants.TransformerState.ONLINE then return end
+
+        local online, onlineError = TransformerManager.SetState(
+            transformerId,
+            Constants.TransformerState.ONLINE,
+            'REPAIR_COMPLETE'
+        )
+        if online then return end
+
+        local rollbackError
+        local refunded = not materialsConsumed
+        current = TransformerManager.GetState(transformerId)
+        if current and current.state == Constants.TransformerState.RECOVERING then
+            local restoredDamage, damageError = TransformerManager.SetDamage(
+                transformerId,
+                originalDamage,
+                'REPAIR_RECOVERY_ROLLBACK'
+            )
+            if not restoredDamage then rollbackError = damageError end
+
+            local offline, offlineError = TransformerManager.SetState(
+                transformerId,
+                Constants.TransformerState.OFFLINE,
+                'REPAIR_RECOVERY_ROLLBACK',
+                { force = true }
+            )
+            if not offline and not rollbackError then rollbackError = offlineError end
+
+            -- Refund only when this recovery still owns the transformer.
+            -- An external sabotage/admin mutation may have moved it out of
+            -- RECOVERING; that path must not create a free repair reward.
+            if materialsConsumed then
+                refunded = refundMaterials(repair.source, repair.plan.materials)
+            end
+        end
+
+        Bridge.Notify(repair.source, 'Tamir kurtarma aşaması başarısız oldu, işlem geri alındı.', 'error')
+        Log.event(Constants.LogEvent.REPAIR_FAILED, {
+            player = repair.source,
+            target = transformerId,
+            reason = 'recovery_state_failed:' .. tostring(onlineError),
+            rollbackError = rollbackError,
+            materialsRefunded = refunded,
+        })
     end)
 end
 
@@ -370,6 +493,19 @@ end)
 -- entry — the transformer stays in REPAIRING and progress stays in the
 -- incident's metadata (spec §38), so a second electrician resumes rather
 -- than starting over.
+RegisterNetEvent('infra:cancelRepairStage', function(sessionId)
+    local src = source
+
+    local allowed = Security.AllowEvent(src, 'infra:cancelRepairStage')
+    if not allowed then return end
+    local validSource = Security.ValidateSource(src)
+    if not validSource then return end
+
+    -- Cancellation is idempotent. Source/session matching inside the helper
+    -- prevents one player from cancelling another player's repair.
+    cancelRepairForSession(src, sessionId, 'REPAIR_CLIENT_CANCELLED')
+end)
+
 AddEventHandler('playerDropped', function()
     local src = source
     for trId, r in pairs(activeRepairs) do

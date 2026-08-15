@@ -13,18 +13,24 @@ local overrides = {
     [Constants.ComponentType.GRID] = {},
     [Constants.ComponentType.SUBSTATION] = {},
     [Constants.ComponentType.FEEDER] = {},
+    [Constants.ComponentType.DISTRICT] = {},
+    [Constants.ComponentType.REGION] = {},
 }
 
 local function isSupportedType(targetType)
     return targetType == Constants.ComponentType.GRID
         or targetType == Constants.ComponentType.SUBSTATION
         or targetType == Constants.ComponentType.FEEDER
+        or targetType == Constants.ComponentType.DISTRICT
+        or targetType == Constants.ComponentType.REGION
 end
 
 local function targetExists(targetType, targetId)
     if targetType == Constants.ComponentType.GRID then return Grids[targetId] ~= nil end
     if targetType == Constants.ComponentType.SUBSTATION then return Substations[targetId] ~= nil end
     if targetType == Constants.ComponentType.FEEDER then return Feeders[targetId] ~= nil end
+    if targetType == Constants.ComponentType.DISTRICT then return Districts.Exists(targetId) end
+    if targetType == Constants.ComponentType.REGION then return PowerRegions.Get(targetId) ~= nil end
     return false
 end
 
@@ -49,11 +55,22 @@ local function recalculate(targetType, targetId, reason)
         Replication.RecalculateForSubstation(targetId, reason)
     elseif targetType == Constants.ComponentType.FEEDER then
         Replication.RecalculateForFeeder(targetId, reason)
+    elseif targetType == Constants.ComponentType.DISTRICT then
+        Replication.RecalculateDistrict(targetId, reason)
+    elseif targetType == Constants.ComponentType.REGION then
+        local region = PowerRegions.Get(targetId)
+        for _, districtCode in ipairs(region and region.districts or {}) do
+            Replication.RecalculateDistrict(districtCode, reason)
+        end
     end
 end
 
 local function createFailureIncident(targetType, targetId, reason, source, context)
-    if not IncidentManager then return end
+    if not IncidentManager
+        or targetType == Constants.ComponentType.DISTRICT
+        or targetType == Constants.ComponentType.REGION then
+        return
+    end
     context = context or {}
 
     local ok, incidentIdOrRecord, err = pcall(IncidentManager.CreateIncident, {
@@ -83,7 +100,12 @@ local function createFailureIncident(targetType, targetId, reason, source, conte
 end
 
 local function resolveFailureIncident(targetType, targetId, reason, source)
-    if not IncidentManager or not IncidentManager.ResolveActiveIncidentForTarget then return end
+    if not IncidentManager
+        or targetType == Constants.ComponentType.DISTRICT
+        or targetType == Constants.ComponentType.REGION
+        or not IncidentManager.ResolveActiveIncidentForTarget then
+        return
+    end
 
     local ok, resolved, err = pcall(
         IncidentManager.ResolveActiveIncidentForTarget,
@@ -153,6 +175,11 @@ function FailureManager.GetBlockingAncestor(targetType, targetId)
         candidates[#candidates + 1] = { Constants.ComponentType.GRID, GridManager.GetGridForSubstation(substationId) }
         candidates[#candidates + 1] = { Constants.ComponentType.SUBSTATION, substationId }
         candidates[#candidates + 1] = { Constants.ComponentType.FEEDER, feederId }
+    elseif targetType == Constants.ComponentType.DISTRICT then
+        candidates[#candidates + 1] = { Constants.ComponentType.DISTRICT, targetId }
+        for _, region in ipairs(PowerRegions.GetRegionsForDistrict(targetId)) do
+            candidates[#candidates + 1] = { Constants.ComponentType.REGION, region.id }
+        end
     end
 
     for _, candidate in ipairs(candidates) do

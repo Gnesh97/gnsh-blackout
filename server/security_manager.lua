@@ -10,9 +10,17 @@
 Security = {}
 
 local rateBuckets = {}
+local txAdminAdmins = {}
+local txAdminAuthRequests = {}
 
 local function securityConfig()
     return Config.Security or {}
+end
+
+local function debugTxAdmin(message)
+    if Config.Debug and Config.Debug.enabled then
+        print('[gnsh-blackout] ' .. message)
+    end
 end
 
 local function reject(code, message, details)
@@ -178,15 +186,148 @@ function Security.AllowEvent(source, eventName, limit, windowSec)
     return true, normalizedSource
 end
 
+local function normalizeTxAdminSource(value)
+    local numeric = tonumber(value)
+    if not numeric or numeric <= 0 or math.floor(numeric) ~= numeric then
+        return nil
+    end
+    return numeric
+end
+
+-- txAdmin emits this as a server-local event after authenticating a player.
+-- Keep the handler local-only: registering it as a network event would allow
+-- a client to forge its own admin status.
+function Security.HandleTxAdminAuth(data)
+    if type(data) ~= 'table' then return false end
+
+    if type(data.isAdmin) ~= 'boolean' then return false end
+
+    local rawNetid = tonumber(data.netid)
+    if rawNetid == -1 then
+        -- txAdmin uses -1 when forcing all online admins to reauthenticate.
+        -- Never leave stale admin access alive across that boundary.
+        if data.isAdmin then return false end
+        txAdminAdmins = {}
+        txAdminAuthRequests = {}
+        debugTxAdmin('TXADMIN_AUTH_REVOKED_ALL')
+        return true
+    end
+
+    local netid = normalizeTxAdminSource(rawNetid)
+    if not netid then return false end
+
+    txAdminAdmins[netid] = data.isAdmin
+    debugTxAdmin(('TXADMIN_AUTH source=%d isAdmin=%s'):format(netid, tostring(data.isAdmin)))
+    return true
+end
+
+-- txAdmin emits the currently authenticated admin NetIds when its admin list
+-- changes. Build a replacement snapshot so removed admins lose access too.
+function Security.HandleTxAdminAdminsUpdated(netids)
+    if type(netids) ~= 'table' then return false end
+
+    local updated = {}
+    for key, value in pairs(netids) do
+        local candidate = value
+        if type(value) == 'boolean' then
+            candidate = value and key or nil
+        end
+
+        local netid = normalizeTxAdminSource(candidate)
+        if netid then
+            updated[netid] = true
+        end
+    end
+
+    txAdminAdmins = updated
+    return true
+end
+
+function Security.IsTxAdminAdmin(source)
+    if securityConfig().txAdmin ~= true then return false end
+    local netid = normalizeTxAdminSource(source)
+    return netid ~= nil and txAdminAdmins[netid] == true
+end
+
+function Security.RequestTxAdminAuth(source)
+    if securityConfig().txAdmin ~= true or type(TriggerClientEvent) ~= 'function' then
+        return false
+    end
+
+    local netid = normalizeTxAdminSource(source)
+    if not netid then return false end
+
+    local now = os.time()
+    if txAdminAuthRequests[netid] and now - txAdminAuthRequests[netid] < 10 then
+        return false
+    end
+
+    txAdminAuthRequests[netid] = now
+    debugTxAdmin(('TXADMIN_AUTH_REQUESTED source=%d'):format(netid))
+    TriggerClientEvent('gnsh-blackout:client:requestTxAdminAuth', netid)
+    return true
+end
+
+-- These events are intentionally registered with AddEventHandler only.
+-- FiveM's server-local txAdmin events do not become client-triggerable
+-- network events this way.
+if type(AddEventHandler) == 'function' then
+    AddEventHandler('txAdmin:events:adminAuth', function(data)
+        Security.HandleTxAdminAuth(data)
+    end)
+    AddEventHandler('txAdmin:events:adminsUpdated', function(netids)
+        Security.HandleTxAdminAdminsUpdated(netids)
+    end)
+    AddEventHandler('playerDropped', function()
+        local netid = normalizeTxAdminSource(source)
+        if netid then
+            txAdminAdmins[netid] = nil
+            txAdminAuthRequests[netid] = nil
+        end
+    end)
+end
+
+local function hasCommandAceAdmin(source)
+    local config = securityConfig()
+    if config.allowCommandAceAdmins ~= true
+        or type(IsPlayerAceAllowed) ~= 'function'
+        or type(config.commandAcePermissions) ~= 'table' then
+        return false
+    end
+
+    for _, permission in ipairs(config.commandAcePermissions) do
+        if type(permission) == 'string' and permission ~= '' then
+            local permissionOk, allowed = pcall(IsPlayerAceAllowed, source, permission)
+            if permissionOk and allowed == true then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function Security.RequireAdmin(source)
     if tonumber(source) == 0 then return true, 0 end
     local validSource, normalizedSource = Security.ValidateSource(source)
     if not validSource then return false, normalizedSource end
-    local permissionOk, allowed = pcall(Bridge.HasPermission, normalizedSource, Config.Debug.adminGroup)
-    if not permissionOk or not allowed then
-        return reject('UNAUTHORIZED_ADMIN', 'admin permission required', { source = normalizedSource })
+    if Security.IsTxAdminAdmin(normalizedSource) then
+        return true, normalizedSource
     end
-    return true, normalizedSource
+    local permissionOk, allowed = pcall(Bridge.HasPermission, normalizedSource, Config.Debug.adminGroup)
+    if permissionOk and allowed == true then
+        return true, normalizedSource
+    end
+
+    -- FXServer operators may have only command-specific ACE grants (for
+    -- example command.refresh and command.restart), not the parent command
+    -- ACE. Check the configured server-side permissions so resource admin
+    -- commands follow the same authority that already controls those tools.
+    if hasCommandAceAdmin(normalizedSource) then
+        return true, normalizedSource
+    end
+
+    Security.RequestTxAdminAuth(normalizedSource)
+    return reject('UNAUTHORIZED_ADMIN', 'admin permission required', { source = normalizedSource })
 end
 
 local function stateForTarget(targetType, targetId)
@@ -252,4 +393,6 @@ end
 
 function Security.ResetForTests()
     rateBuckets = {}
+    txAdminAdmins = {}
+    txAdminAuthRequests = {}
 end

@@ -37,8 +37,10 @@ end)
 TEST('incident impact: grid aggregates its complete topology', function()
     local impact = IncidentImpact.Calculate('grid', 'ls_central')
     ASSERT_EQ(impact.gridId, 'ls_central')
-    assertDistricts(impact.affectedDistricts, { 'DOWNT', 'PBOX', 'SKID' }, 'grid')
-    ASSERT_EQ(impact.estimatedImpact.districtCount, 3)
+    assertDistricts(impact.affectedDistricts, {
+        'DOWNT', 'KOREAT', 'LEGSQU', 'MOVIE', 'MURRI', 'PBOX', 'SKID',
+    }, 'grid')
+    ASSERT_EQ(impact.estimatedImpact.districtCount, 7)
 end)
 
 TEST('incident impact: unknown target fails closed', function()

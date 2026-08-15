@@ -2,11 +2,54 @@
 
 ## Mevcut durum
 
-- Phase 19–21 kodu tamamlandı.
-- Bu phase’lerin oyun içi kabul testleri hâlâ bekliyor.
-- Phase 22’ye geçiş, Phase 19–21 canlı testleri temiz geçtikten sonra yapılacak.
+- Phase 19–21 kodu ve canlı kabulü tamamlandı.
+- Phase 22–35 kodu tamamlandı; tek oyunculu kabuller tamam, final çok oyunculu
+  kabul matrisi sonraya bırakıldı.
+- Native 90 district topology extension kodu tamamlandı; yeni logical-only
+  component’lerin gerçek dünya placement kabulü ayrıca yapılacak.
 - Her phase ayrı uygulanacak, test edilecek, kullanıcı onayı alınmadan sonraki phase başlamayacak.
 - Her aşamada `CHANGELOG.md` güncellenecek.
+
+## Citywide Topology Extension — 2026-08-15
+
+Kullanıcı kararıyla Phase 22’deki sınırlı topology kapsamı genişletildi:
+
+- Los Santos city region içindeki 44 enabled district tekil grid ve feeder
+  sahipliğiyle bağlandı.
+- `ls_central`, `ls_south`, `ls_west`, `ls_vinewood` ve
+  `ls_east_industrial` olmak üzere beş şehir grid’i eklendi.
+- Her şehir grid’i bir substation, iki primary feeder ve iki transformer
+  içeriyor.
+- Doğrulanmış fiziksel koordinat bulunmayan yeni component’ler
+  `physical = false` logical-only olarak tutuluyor. Sahte coordinate, prop
+  veya interaction noktası eklenmiyor.
+- Fiziksel placement kabulü, gerçek oyun içi koordinatlar doğrulanıp
+  `shared/world_placement.lua` içine eklendikten sonra yapılacak.
+
+## Native 90 District Topology Extension — 2026-08-15
+
+Kalan 43 native district, rastgele dağıtım yapılmadan statik logical topology’ye
+bağlandı:
+
+- Registry, `web/assets/gta-native-districts.json` içindeki 90 native code’un
+  tamamını içeriyor. `HARMOSUB` yalnızca mevcut overlap testleri için synthetic
+  zone olarak ayrıca korunuyor.
+- `ALTA`, `BAYTRE`, `BHAMCA`, `DELSOL`, `EAST_V`, `GALLI`, `LDAM`, `OBSERV`,
+  `PALHIGH` ve `PALMPOW` için geometry-backed XY AABB eklendi; Z aralıkları
+  muhafazakâr kaldı. Gerçek dünya placement’ı temsil etmiyor.
+- Toplam yapı 11 grid, 11 substation, 22 feeder ve 22 transformer oldu.
+  Her grid iki bağımsız primary feeder ve birer transformer içeriyor.
+- Yeni component’ler `physical = false` logical-only olarak kaldı. API,
+  incident, admin, persistence ve replication zincirleri bu component’leri
+  kullanabilir; client tarafında sahte interaction veya prop oluşmaz.
+- Los Santos `city` operational region’ı haritadaki şehir sınırını takip
+  edecek şekilde 51 district’e çıktı; Tataviam Mountains (`TATAMO`) da şehir
+  kapsamındadır. Tüm enabled registry district’leri tek grid ve tek
+  feeder ile kaplanıyor.
+
+Unit sonucu: Lua 5.4.8 ile `190 passed, 0 failed`; 121 Lua dosyasında syntax
+scan `0` failure. Oyun içi yeni bölgelerin gerçek placement kabulü daha sonra
+ayrı yapılacak.
 
 ## Phase 22 — World Placement
 

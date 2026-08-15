@@ -37,8 +37,21 @@ TEST('every registry entry carries the full §17 district model shape', function
         ASSERT_TRUE(entry.enabled == true or entry.enabled == false, code .. ': enabled must be boolean')
         ASSERT_TRUE(entry.category ~= nil, code .. ': missing category')
         ASSERT_EQ(entry.resolver, Constants.Resolver.GTA_NATIVE, code .. ': resolver must be gta_native')
-        ASSERT_EQ(entry.aabbConfidence, 'approx', code .. ': aabbConfidence should be approx until calibrated')
+        ASSERT_TRUE(
+            entry.aabbConfidence == 'approx' or entry.aabbConfidence == 'geometry',
+            code .. ': aabbConfidence must be approx or geometry'
+        )
         ASSERT_TRUE(entry.aabb ~= nil and entry.aabb.min ~= nil and entry.aabb.max ~= nil, code .. ': missing aabb')
+    end
+end)
+
+TEST('native geometry additions retain geometry-backed confidence', function()
+    for _, code in ipairs({ 'ALTA', 'BAYTRE', 'BHAMCA', 'DELSOL', 'EAST_V', 'GALLI', 'LDAM', 'OBSERV', 'PALHIGH', 'PALMPOW', 'TATAMO' }) do
+        local entry = Districts.ByCode[code]
+        ASSERT_TRUE(entry ~= nil, code .. ': native geometry code is missing')
+        ASSERT_EQ(entry.aabbConfidence, 'geometry', code .. ': native geometry confidence was lost')
+        ASSERT_TRUE(entry.aabb.min.x < entry.aabb.max.x, code .. ': invalid geometry X bounds')
+        ASSERT_TRUE(entry.aabb.min.y < entry.aabb.max.y, code .. ': invalid geometry Y bounds')
     end
 end)
 

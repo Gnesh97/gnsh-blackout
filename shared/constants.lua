@@ -51,6 +51,8 @@ Constants.ComponentType = {
     SUBSTATION = 'substation',
     FEEDER = 'feeder',
     TRANSFORMER = 'transformer', -- internal ancestor lookup only
+    DISTRICT = 'district',
+    REGION = 'region',
 }
 
 Constants.ComponentState = {

@@ -31,6 +31,14 @@ local function startCooldown(targetId)
     cooldowns[targetId] = os.time() + cooldownSec
 end
 
+local function consumeItem(source, item, amount)
+    local ok, removed, reason = pcall(Bridge.RemoveItem, source, item, amount)
+    if not ok or removed ~= true then
+        return false, reason or 'item_remove_failed'
+    end
+    return true
+end
+
 RegisterNetEvent('infra:requestSabotage', function(targetId, sabotageType)
     local src = source
     local allowed, sourceOrError = Security.AllowEvent(src, 'infra:requestSabotage')
@@ -87,7 +95,7 @@ RegisterNetEvent('infra:requestSabotage', function(targetId, sabotageType)
     local playerCoords = GetEntityCoords(ped)
     local targetCoords = worldPoint.coords
     if not targetCoords then
-        Bridge.Notify(src, 'Trafo world placement eksik.', 'error')
+        Bridge.Notify(src, 'Trafo dünya yerleşimi eksik.', 'error')
         return
     end
     local maxDist = (Config.Sabotage and Config.Sabotage.maxInteractionDistance) or 5.0
@@ -147,15 +155,18 @@ RegisterNetEvent('infra:submitSabotageResult', function(sessionId, success)
     end
     local pendingSession = sessionOrError
     if type(success) ~= 'boolean' then
+        InteractionManager.CancelSession(src, sessionId)
         Bridge.Notify(src, 'Geçersiz sabotaj sonucu.', 'error')
         return
     end
     if not Security.ValidateRevision(Constants.ComponentType.TRANSFORMER, pendingSession.targetId, pendingSession.targetRevision) then
+        InteractionManager.CancelSession(src, sessionId)
         Bridge.Notify(src, 'Sabotaj hedefi güncelliğini kaybetti.', 'error')
         return
     end
     local worldPoint = InfrastructureWorld and InfrastructureWorld[pendingSession.targetId]
     if not worldPoint or not Security.ValidateDistance(src, worldPoint.coords, (Config.Sabotage and Config.Sabotage.maxInteractionDistance) or 5.0) then
+        InteractionManager.CancelSession(src, sessionId)
         Bridge.Notify(src, 'Sabotaj hedefinden çok uzaktasınız.', 'error')
         return
     end
@@ -163,6 +174,7 @@ RegisterNetEvent('infra:submitSabotageResult', function(sessionId, success)
     -- Validate session and timing (anti-cheat)
     local ok, sessionOrErr = InteractionManager.ValidateSessionComplete(src, sessionId)
     if not ok then
+        InteractionManager.CancelSession(src, sessionId)
         Log.event(Constants.LogEvent.SABOTAGE_FAILED, {
             player = src,
             sessionId = sessionId,
@@ -188,14 +200,28 @@ RegisterNetEvent('infra:submitSabotageResult', function(sessionId, success)
         return
     end
 
-    startCooldown(targetId)
-
-    -- Consume item
+    -- A validated sabotage attempt consumes one configured item regardless
+    -- of skillcheck result. Failed skillchecks still create no damage,
+    -- incident, or success cooldown.
+    local itemConsumed = false
     if Config.Sabotage and Config.Sabotage.requireItem then
-        Bridge.RemoveItem(src, cfg.item, 1)
+        local removed, removeError = consumeItem(src, cfg.item, 1)
+        if not removed then
+            Log.event(Constants.LogEvent.SABOTAGE_FAILED, {
+                player = src,
+                target = targetId,
+                sabotageType = sabotageType,
+                reason = 'item_remove_failed:' .. tostring(removeError),
+            })
+            Bridge.Notify(src, 'Sabotaj eşyası envanterden düşürülemedi, işlem iptal edildi.', 'error')
+            return
+        end
+        itemConsumed = true
     end
 
     if success then
+
+        startCooldown(targetId)
         Bridge.Notify(src, ('%s yerleştirildi, birazdan patlayacak...'):format(cfg.label or sabotageType), 'success')
 
         -- Detonation is delayed (fuse timer), not instant — the player
@@ -231,6 +257,7 @@ RegisterNetEvent('infra:submitSabotageResult', function(sessionId, success)
             target = targetId,
             sabotageType = sabotageType,
             reason = 'minigame_failed',
+            itemConsumed = itemConsumed,
         })
 
         Bridge.Notify(src, 'Sabotaj başarısız oldu!', 'error')

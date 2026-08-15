@@ -26,6 +26,26 @@ local targetActiveMap = {}      -- [targetType][targetId] = incidentId (Phase 23
 local incidentHistory = {}      -- bounded ring buffer of resolved/cancelled incidents, see Config.MaxIncidentHistory
 local incidentCounter = 0
 
+local severityValues = {
+    MINOR = 25,
+    MODERATE = 50,
+    MAJOR = 75,
+    CRITICAL = 100,
+    MINOR_DAMAGE = 25,
+    MODERATE_DAMAGE = 50,
+    MAJOR_DAMAGE = 75,
+    CRITICAL_DAMAGE = 90,
+    DESTROYED = 100,
+}
+
+local function normalizeSeverity(value)
+    local numeric = tonumber(value)
+    if numeric then return numeric end
+    return severityValues[string.upper(tostring(value or ''))] or 0
+end
+
+IncidentManager.NormalizeSeverity = normalizeSeverity
+
 function IncidentManager.Init()
     activeIncidents = {}
     gridActiveMap = {}
@@ -127,7 +147,7 @@ function IncidentManager.CreateIncident(params)
         feederId = feederId,
         transformerId = transformerId,
         cause = params.cause or Constants.IncidentCause.UNKNOWN,
-        severity = params.severity or 100,
+        severity = normalizeSeverity(params.severity or 100),
         status = Constants.IncidentStatus.ACTIVE,
         startedAt = os.time(),
         startedBy = params.startedBy or 'SYSTEM',
@@ -257,6 +277,7 @@ function IncidentManager.RestoreIncident(incident)
     if not incident or not incident.incidentId then return false end
 
     incident.metadata = incident.metadata or {}
+    incident.severity = normalizeSeverity(incident.severity)
     incident.targetType = incident.targetType
         or incident.metadata.targetType
         or (incident.transformerId and Constants.ComponentType.TRANSFORMER)
@@ -322,13 +343,17 @@ function IncidentManager.GetActiveIncidentForGrid(gridId)
     if not set then return nil end
 
     local best = nil
+    local bestSeverity = -1
     for incidentId in pairs(set) do
         local inc = activeIncidents[incidentId]
         if inc then
+            local severity = normalizeSeverity(inc.severity)
+            inc.severity = severity
             if not best
-                or inc.severity > best.severity
-                or (inc.severity == best.severity and inc.startedAt < best.startedAt) then
+                or severity > bestSeverity
+                or (severity == bestSeverity and inc.startedAt < best.startedAt) then
                 best = inc
+                bestSeverity = severity
             end
         end
     end

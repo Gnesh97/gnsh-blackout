@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Altyapı Kontrolü</title>
+  <style id="nui-boot-style">
+    html,
+    body { background: transparent !important; }
+
+    html:not(.ui-active),
+    html:not(.ui-active) body { visibility: hidden !important; }
+  </style>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!--
+    THESIS: Yönetici, altyapı durumunu haritada görür ve müdahaleyi aynı yüzeyde başlatır; terminal komut karmaşasını reddeder.
+    OWN-WORLD: Koyu saha-konsolu, mint durum ışıkları, hairline grid ve amber yönetici vurgusu; çift çerçeveli operasyon yüzeyi.
+    STORY: Önce şehrin nerede etkilendiği, sonra hangi güvenli yönetici eyleminin uygulanacağı anlaşılır.
+    FIRST VIEWPORT: Ortada geniş GTA dünya haritası, sağda seçili district telemetrisi; üstte yüzen iki sekmeli kontrol başlığı.
+    FORM: Asimetrik operasyon split’i; ilk sekme harita, ikinci sekme komut workbench’i. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
+  <main id="app" aria-live="polite">
+    <section id="notifications" class="notifications" aria-label="Bildirimler"></section>
+
+    <section id="admin" class="screen screen--admin hidden" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+      <div class="admin-shell">
+        <div class="admin-frame">
+          <header class="admin-header">
+            <div class="admin-brand" aria-hidden="true">
+              <span class="admin-brand__core"></span>
+              <span class="admin-brand__ring"></span>
+            </div>
+            <div class="admin-heading">
+              <div class="admin-meta">
+                <span class="admin-meta__signal"></span>
+                <span>YÖNETİCİ KONTROLÜ</span>
+                <span class="admin-meta__divider"></span>
+                <span id="admin-live-state">CANLI VERİ</span>
+              </div>
+              <h1 id="admin-title">Yönetici Kontrol Merkezi</h1>
+              <p id="admin-subtitle">Şehir altyapısı için canlı yönetim yüzeyi</p>
+            </div>
+            <div class="admin-header-actions">
+              <div class="admin-quick-stat">
+                <span class="admin-stat__label">BÖLGE</span>
+                <strong id="admin-district-count">00</strong>
+              </div>
+              <div class="admin-quick-stat">
+                <span class="admin-stat__label">KOMUT</span>
+                <strong id="admin-command-count">00</strong>
+              </div>
+              <button id="admin-refresh" class="admin-icon-button" type="button" aria-label="Verileri yenile" title="Verileri yenile">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4L4 9M4 5v4h4M4 13a8 8 0 0 0 14.7 4L20 15M20 19v-4h-4"/></svg>
+              </button>
+              <button id="admin-close" class="admin-close-button" type="button" aria-label="Yönetici panelini kapat">
+                <span></span><span></span>
+              </button>
+            </div>
+          </header>
+
+          <nav class="admin-tabs" role="tablist" aria-label="Yönetici paneli sekmeleri">
+            <button id="admin-tab-map-button" class="admin-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="admin-tab-map" tabindex="0" data-admin-tab="map">
+              <span class="admin-tab__index">01</span>
+              <span class="admin-tab__copy"><strong>ŞEHİR HARİTASI</strong><small>Bölge görünümü</small></span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5 9 3l6 3 5-2.5V18.5L15 21l-6-3-5 2.5v-15Z"/><path d="M9 3v15M15 6v15"/></svg>
+            </button>
+            <button id="admin-tab-commands-button" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="admin-tab-commands" tabindex="-1" data-admin-tab="commands">
+              <span class="admin-tab__index">02</span>
+              <span class="admin-tab__copy"><strong>KOMUT MERKEZİ</strong><small>Yönetici işlemleri</small></span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14"/></svg>
+            </button>
+          </nav>
+
+          <div id="admin-tab-map" class="admin-tab-panel is-active" role="tabpanel" aria-labelledby="admin-tab-map-button">
+            <div class="admin-map-layout">
+              <section class="admin-map-card" aria-labelledby="admin-map-title">
+                <header class="admin-section-header">
+                  <div>
+                    <span class="admin-section-label">CANLI HARİTA / 01</span>
+                    <h2 id="admin-map-title">Los Santos + Blaine Bölgesi</h2>
+                  </div>
+                  <div class="admin-map-legend" aria-label="Bölge durum açıklaması">
+                    <span><i class="legend-dot is-online"></i> Enerji aktif</span>
+                    <span><i class="legend-dot is-offline"></i> Kesinti</span>
+                    <span><i class="legend-dot is-unassigned"></i> Atanmamış</span>
+                  </div>
+                </header>
+                <div class="admin-map-viewport">
+                  <div id="admin-map-raster" class="admin-map-raster" aria-hidden="true">
+                    <img class="admin-map-image" src="assets/gta-base-map.png" alt="">
+                  </div>
+                  <svg id="admin-map-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 2048 2048" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="admin-map-title admin-map-description">
+                    <desc id="admin-map-description">GTA 5 dünya koordinatları ve ayrıntılı district haritası üzerinden bölge sınırlarını ve enerji durumlarını gösteren yönetici haritası.</desc>
+                    <g id="admin-map-camera">
+                      <path id="admin-map-boundaries" class="admin-map-boundaries" aria-hidden="true"></path>
+                      <g id="admin-map-zones"></g>
+                      <g id="admin-map-labels" aria-hidden="true">
+                        <text class="map-system-label" x="96" y="128">GTA / BÖLGE KATMANI</text>
+                        <text class="map-system-label" x="1940" y="1960" text-anchor="end">OYUN BÖLGE SINIRLARI</text>
+                      </g>
+                      <g id="admin-map-markers"></g>
+                      </g>
+                  </svg>
+                  <div class="map-crosshair map-crosshair--tl"></div>
+                  <div class="map-crosshair map-crosshair--br"></div>
+                  <div class="map-scale"><span></span><small>2 KM</small></div>
+                  <div class="map-readout"><span>DÜNYA KOORDİNAT AĞI</span><strong id="admin-map-zoom-label">%100</strong></div>
+                  <div class="admin-map-tools" role="group" aria-label="Harita araçları">
+                    <button id="admin-map-zoom-in" type="button" aria-label="Haritayı yakınlaştır" title="Haritayı yakınlaştır"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                    <button id="admin-map-zoom-out" type="button" aria-label="Haritayı uzaklaştır" title="Haritayı uzaklaştır"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+                    <button id="admin-map-reset" type="button" aria-label="Harita görünümünü sıfırla" title="Harita görünümünü sıfırla">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7M4 5v5h5"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <footer class="admin-map-footer">
+                  <span><kbd>TIKLA</kbd> bölge seç</span>
+                  <span><kbd>CTRL + SOL</kbd> haritayı taşı</span>
+                  <span><kbd>SCROLL</kbd> yakınlaştır</span>
+                  <span><kbd>ESC</kbd> paneli kapat</span>
+                  <span id="admin-map-updated">REVİZYON BEKLENİYOR</span>
+                </footer>
+              </section>
+
+              <aside class="admin-inspector" aria-labelledby="admin-inspector-title">
+                <div class="admin-inspector__topline"><span>SEÇİLİ BÖLGE / DENETİM</span><i id="admin-inspector-dot" class="legend-dot is-online"></i></div>
+                <h2 id="admin-inspector-title">Bölge seçin</h2>
+                <p id="admin-inspector-copy">Harita üzerindeki bir bölgeye tıklayarak canlı altyapı durumunu görüntüleyin.</p>
+                <div class="admin-inspector-status"><span id="admin-inspector-status-label">BEKLEMEDE</span><strong id="admin-inspector-status-value">—</strong></div>
+                <dl class="admin-inspector-grid">
+                  <div><dt>ŞEBEKE</dt><dd id="admin-inspector-grid">—</dd></div>
+                  <div><dt>ATAMA</dt><dd id="admin-inspector-assignment">—</dd></div>
+                  <div><dt>SEVİYE</dt><dd id="admin-inspector-level">—</dd></div>
+                  <div><dt>REVİZYON</dt><dd id="admin-inspector-revision">—</dd></div>
+                </dl>
+                <div class="admin-inspector-coords">
+                  <span>DÜNYA SINIRLARI</span>
+                  <code id="admin-inspector-bounds">—</code>
+                </div>
+                <div class="admin-inspector-list" id="admin-inspector-list"></div>
+              </aside>
+            </div>
+          </div>
+
+          <div id="admin-tab-commands" class="admin-tab-panel" role="tabpanel" aria-labelledby="admin-tab-commands-button" hidden>
+            <div class="admin-command-layout">
+              <aside class="admin-command-index" aria-labelledby="admin-command-index-title">
+                <section class="admin-region-panel" aria-labelledby="admin-region-panel-title">
+                  <div class="admin-region-panel__head">
+                    <span class="admin-section-label">HIZLI MÜDAHALE / BÖLGE</span>
+                    <h2 id="admin-region-panel-title">Bölgesel kesinti</h2>
+                    <p>Bir bölgenin tüm district elektriklerini tek işlemle yönetin.</p>
+                  </div>
+                  <div id="admin-region-actions" class="admin-region-actions"></div>
+                </section>
+                <div class="admin-section-header admin-section-header--compact">
+                  <div>
+                    <span class="admin-section-label">KOMUT KATALOĞU / 02</span>
+                    <h2 id="admin-command-index-title">İşlem kataloğu</h2>
+                  </div>
+                </div>
+                <div id="admin-command-list" class="admin-command-list" role="listbox" aria-label="Yönetici komutları"></div>
+              </aside>
+              <section class="admin-command-workbench" aria-labelledby="admin-command-title">
+                <div class="admin-command-workbench__head">
+                  <div>
+                    <span class="admin-section-label">YETKİLİ İŞLEM</span>
+                    <h2 id="admin-command-title">Komut seçin</h2>
+                    <p id="admin-command-description">Sol taraftan bir yönetici işlemi seçin.</p>
+                  </div>
+                  <code id="admin-command-code">—</code>
+                </div>
+                <form id="admin-command-form" class="admin-command-form">
+                  <div id="admin-command-fields" class="admin-command-fields"></div>
+                  <div class="admin-command-form__footer">
+                    <div class="admin-command-warning"><span></span><p>Bu işlem sunucu tarafında yetki kontrolünden geçer ve audit kaydına yazılır.</p></div>
+                    <button id="admin-command-submit" class="admin-submit-button" type="submit">
+                      <span>Komutu çalıştır</span>
+                      <i aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg></i>
+                    </button>
+                  </div>
+                </form>
+                <div id="admin-command-status" class="admin-command-status" role="status" aria-live="polite">Hazır.</div>
+              </section>
+            </div>
+          </div>
+
+          <footer class="admin-footer"><span>GNSH / ŞEHİR ALTYAPI KONTROLÜ</span><span><kbd>↑</kbd><kbd>↓</kbd> sekme <kbd>ESC</kbd> kapat</span></footer>
+        </div>
+      </div>
+    </section>
+
+    <section id="menu" class="screen hidden" aria-modal="true" aria-labelledby="menu-title">
+      <div class="menu-shell panel-surface">
+        <header class="menu-header">
+          <div class="brand-mark" aria-hidden="true">
+            <span class="brand-mark__core"></span>
+            <span class="brand-mark__orbit"></span>
+          </div>
+          <div class="header-copy">
+            <p class="eyebrow"><span class="status-dot"></span> ALTYAPI KONTROLÜ</p>
+            <h1 id="menu-title">Trafo operasyonu</h1>
+            <p id="menu-subtitle" class="subtitle">Operasyon seçin</p>
+          </div>
+          <div id="link-status" class="header-status" data-state="stable" aria-live="polite" aria-label="BAĞLANTI KARARLI">
+            <span class="status-label">BAĞLANTI</span>
+            <strong id="link-state">KARARLI</strong>
+          </div>
+        </header>
+
+        <div class="menu-divider"></div>
+
+        <div class="menu-readout">
+          <span class="readout-label">YETKİLİ İŞLEMLER</span>
+          <span id="menu-count" class="readout-value">00 MEVCUT</span>
+        </div>
+
+        <div id="menu-options" class="option-list" role="list"></div>
+
+        <footer class="menu-footer">
+          <span><kbd>ESC</kbd> kapat</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> gezin</span>
+          <span><kbd>ENTER</kbd> seç</span>
+          <button id="menu-close" class="ghost-button" type="button">İptal</button>
+        </footer>
+      </div>
+    </section>
+
+    <section id="progress" class="screen screen--bottom hidden" aria-live="assertive" aria-labelledby="progress-label">
+      <div class="progress-shell panel-surface">
+        <div class="progress-topline">
+          <span id="progress-kicker" class="eyebrow"><span class="status-dot status-dot--amber"></span> İŞLEM SÜRÜYOR</span>
+          <span id="progress-percent" class="progress-percent">00%</span>
+        </div>
+        <div class="progress-copy">
+          <div>
+            <h2 id="progress-label">İşlem sürüyor</h2>
+            <p id="progress-stage" class="subtitle">Sistem yanıtı bekleniyor</p>
+          </div>
+          <span id="progress-step" class="step-counter">-- / --</span>
+        </div>
+        <div class="progress-track" aria-hidden="true"><div id="progress-fill" class="progress-fill"></div></div>
+        <div class="progress-footer">
+          <span id="progress-hint">İşlem tamamlanana kadar alandan ayrılmayın.</span>
+          <button id="progress-cancel" class="ghost-button hidden-control" type="button">İptal</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="skillcheck" class="screen hidden" aria-modal="true" aria-labelledby="skill-title">
+      <div class="skill-shell panel-surface">
+        <div class="skill-scanline" aria-hidden="true"></div>
+        <div class="skill-header">
+          <span class="eyebrow"><span class="status-dot status-dot--red"></span> GÜVENLİK DOĞRULAMASI</span>
+          <span id="skill-stage" class="step-counter">01 / 01</span>
+        </div>
+        <h2 id="skill-title">Güvenlik doğrulaması</h2>
+        <p id="skill-label" class="subtitle">Doğru tuşa zamanında basın.</p>
+        <div class="key-area">
+          <div id="skill-key" class="keycap">E</div>
+          <div class="key-copy">
+            <span class="readout-label">BEKLENEN GİRDİ</span>
+            <strong id="skill-key-label">E TUŞU</strong>
+          </div>
+        </div>
+        <div class="skill-time-track" aria-hidden="true"><div id="skill-time-fill" class="skill-time-fill"></div></div>
+        <div class="skill-footer">
+          <span id="skill-timer">1,2 sn</span>
+          <span>E / R tuşlarından biri</span>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

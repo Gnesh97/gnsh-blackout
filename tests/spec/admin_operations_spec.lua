@@ -14,6 +14,16 @@ TEST('admin operation command surface uses explicit targets', function()
         reloadtopology = true,
         resyncvisual = true,
         repairall = true,
+        blackout_city = true,
+        restore_city = true,
+        blackout_towns = true,
+        restore_towns = true,
+        blackout_south = true,
+        restore_south = true,
+        blackout_vinewood = true,
+        restore_vinewood = true,
+        blackout_north = true,
+        restore_north = true,
     }
 
     for _, name in ipairs(AdminOperations.CommandNames) do

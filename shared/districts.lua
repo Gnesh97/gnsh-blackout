@@ -18,10 +18,12 @@
       - server/zone_resolver.lua resolves districts via the AABB table
         below — an approximation, because the server has no zone native.
 
-    THE AABB VALUES BELOW ARE APPROXIMATE. They were sized generously from
-    general knowledge of the GTA V map layout, not extracted from game
-    files. They are a reasonable starting point, NOT verified ground
-    truth. Before relying on server-side district resolution in
+    Most legacy entries below still use approximate AABBs sized from general
+    GTA V map knowledge. The ten native codes added in the citywide extension
+    are sourced from web/assets/gta-native-districts.json: their XY envelope
+    is geometry-backed and their Z envelope remains a conservative gameplay
+    range. `aabbConfidence` marks that distinction. Before relying on
+    server-side district resolution in
     production, run `/districtaudit` (client) while crossing every
     district border you care about — it compares the client's native
     result against the server's AABB result and logs any mismatch
@@ -35,14 +37,11 @@
     server/zone_resolver.lua and Utils.AABBVolume), so a small district
     fully nested inside a larger one still resolves correctly.
 
-    HONEST GAP (Phase 17): the original 44 codes (Phase 1-16) plus ~40
-    more added this phase get this project to ~84 recognized codes, which
-    covers every commonly-referenced GTA V zone this project's author
-    could enumerate from general map knowledge — NOT a byte-exact extract
-    of the game's own zones.xml (no such file was available to read). If
-    `GetNameOfZone` returns a code not in this table, ClientZone.
-    ResolveDistrict already logs it once (see that file) so gaps surface
-    naturally during play rather than staying silent.
+    The native geometry sidecar currently contains 90 district codes. The
+    registry keeps those 90 codes plus the synthetic HARMOSUB overlap-test
+    zone and the disabled OCEANA/SANAND markers. If GetNameOfZone returns a
+    code not in this table, ClientZone.ResolveDistrict still logs it once so
+    future gaps surface rather than staying silent.
 ]]
 
 Districts = {}
@@ -66,7 +65,7 @@ local RAW = {
     { code = 'ARMYB', label = 'Fort Zancudo', category = 'restricted', min = { -2450, 2900, 0 }, max = { -1650, 3450, 100 } },
     { code = 'CMSW', label = 'Chiliad Mountain State Wilderness', category = 'wilderness', min = { -1900, 3450, 20 }, max = { -900, 4600, 700 } },
     { code = 'PALCOV', label = 'Paleto Cove', category = 'blaine_county', min = { -750, 6300, 0 }, max = { -450, 6700, 40 } },
-    { code = 'TATAMO', label = 'Tataviam Mountains', category = 'wilderness', min = { 400, 6300, 100 }, max = { 1200, 7200, 700 } },
+    { code = 'TATAMO', label = 'Tataviam Mountains', category = 'los_santos', aabbConfidence = 'geometry', min = { 1306.69, -1006.57, 0 }, max = { 3064.06, 1355.64, 300 } },
     { code = 'SANCHIA', label = 'San Chianski Mountain Range', category = 'wilderness', min = { -1900, 4550, 100 }, max = { -900, 5600, 900 } },
     { code = 'MTGORDO', label = 'Mount Gordo', category = 'wilderness', min = { -500, 6100, 0 }, max = { -100, 6500, 200 } },
     { code = 'MTJOSE', label = 'Mount Josiah', category = 'wilderness', min = { 500, 5000, 100 }, max = { 900, 5450, 500 } },
@@ -138,6 +137,21 @@ local RAW = {
     { code = 'ZP_ORT', label = 'Port of South Los Santos', category = 'los_santos', min = { 400, -2750, 0 }, max = { 800, -2450, 40 } },
     { code = 'ZQ_UAR', label = 'Davis Quartz', category = 'los_santos', min = { 100, -1950, 10 }, max = { 400, -1750, 60 } },
 
+    -- ── Native geometry additions (90-code citywide coverage) ───────────
+    -- XY bounds come from web/assets/gta-native-districts.json. The source
+    -- geometry is 2D, so Z envelopes are intentionally conservative and do
+    -- not claim a verified physical interaction placement.
+    { code = 'ALTA', label = 'Alta', category = 'los_santos', aabbConfidence = 'geometry', min = { -49.4677, -452.982, 0 }, max = { 588.273, -204.713, 300 } },
+    { code = 'BAYTRE', label = 'Baytree Canyon', category = 'blaine_county', aabbConfidence = 'geometry', min = { 176.902, 805.045, 150 }, max = { 445.685, 1128.48, 300 } },
+    { code = 'BHAMCA', label = 'Banham Canyon', category = 'wilderness', aabbConfidence = 'geometry', min = { -3151.24, 203.922, -20 }, max = { -2000.56, 1579.02, 300 } },
+    { code = 'DELSOL', label = 'La Puerta', category = 'los_santos', aabbConfidence = 'geometry', min = { -1160.64, -1809.2, 0 }, max = { -573.839, -1158.02, 300 } },
+    { code = 'EAST_V', label = 'East Vinewood', category = 'los_santos', aabbConfidence = 'geometry', min = { 485.801, -511.482, 0 }, max = { 1391.07, -35.0134, 300 } },
+    { code = 'GALLI', label = 'Galileo Park', category = 'los_santos', aabbConfidence = 'geometry', min = { 358.277, 1083.3, 210 }, max = { 922.968, 1451.73, 500 } },
+    { code = 'LDAM', label = 'Land Act Dam', category = 'blaine_county', aabbConfidence = 'geometry', min = { 1631.19, -98.2953, 0 }, max = { 1699.25, 68.7914, 250 } },
+    { code = 'OBSERV', label = 'Galileo Observatory', category = 'los_santos', aabbConfidence = 'geometry', min = { -517.775, 1039.72, 216 }, max = { -357.042, 1249.79, 470 } },
+    { code = 'PALHIGH', label = 'Palomino Highlands', category = 'los_santos', aabbConfidence = 'geometry', min = { 1485.92, -2718.48, 0 }, max = { 2916.93, 4.98006, 300 } },
+    { code = 'PALMPOW', label = 'Palmer-Taylor Power Station', category = 'blaine_county', aabbConfidence = 'geometry', min = { 2556.55, 1256.02, 0 }, max = { 2933.7, 1760.87, 300 } },
+
     -- ── Conceptual / non-assignable markers (spec §17.1: recognized but explicitly not player territory) ──
     { code = 'OCEANA', label = 'Pacific Ocean', category = 'water', enabled = false, min = { -4000, -6000, -50 }, max = { 4000, 8000, 10 } },
     { code = 'SANAND', label = 'San Andreas', category = 'restricted', enabled = false, min = { -4000, -8000, -500 }, max = { 4000, 8000, 2000 } },
@@ -179,7 +193,7 @@ for _, entry in ipairs(RAW) do
         defaultGrid = nil,         -- filled in by Districts.ComputeAssignments() once Grids loads (see shared/grids.lua tail)
         visualProfile = nil,       -- §28.1 override, nil = use the owning grid's profile (Phase 28, not read anywhere yet)
         metadata = {},
-        aabbConfidence = 'approx', -- see file header — none of these are calibrated yet
+        aabbConfidence = entry.aabbConfidence or 'approx',
         aabb = {
             min = vector3(entry.min[1], entry.min[2], entry.min[3]),
             max = vector3(entry.max[1], entry.max[2], entry.max[3]),

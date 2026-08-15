@@ -67,6 +67,8 @@ dofile('shared/utilities.lua')
 dofile('shared/constants.lua')
 dofile('shared/types.lua')
 dofile('shared/districts.lua')
+dofile('shared/regions.lua')
+dofile('shared/district_geometry.lua')
 dofile('shared/grids.lua')
 dofile('shared/feeders.lua')
 dofile('shared/world_placement.lua')
@@ -74,6 +76,7 @@ dofile('shared/zone_resolver.lua')
 dofile('profiles/sandy.lua')
 dofile('profiles/ls_central.lua')
 dofile('shared/visual_profile_resolver.lua')
+dofile('bridge/core.lua')
 dofile('shared/validators.lua')
 dofile('server/power_calculator.lua')
 dofile('server/api_helpers.lua')
@@ -81,7 +84,7 @@ dofile('client/visual/ownership.lua') -- touches zero natives, see tests/spec/vi
 
 -- Phase 23 impact tests use the real static topology and reverse indexes.
 -- Runtime incident lifecycle remains an in-game/server integration concern.
-Log = { event = function() end, warn = function() end, error = function() end }
+Log = { event = function() end, warn = function() end, error = function() end, debug = function() end }
 dofile('server/persistence.lua')
 dofile('server/metrics.lua')
 dofile('server/grid_manager.lua')
@@ -90,9 +93,12 @@ dofile('server/security_manager.lua')
 dofile('server/incident_impact.lua')
 dofile('server/random_failure_manager.lua')
 local realRegisterCommand = RegisterCommand
+local realRegisterNetEvent = RegisterNetEvent
 RegisterCommand = function() end
+RegisterNetEvent = function() end
 dofile('server/admin_operations.lua')
 RegisterCommand = realRegisterCommand
+RegisterNetEvent = realRegisterNetEvent
 local realAddEventHandler = AddEventHandler
 local realGetResourceState = GetResourceState
 local realGetCurrentResourceName = GetCurrentResourceName
@@ -100,11 +106,13 @@ AddEventHandler = function() end
 GetResourceState = function() return 'stopped' end
 GetCurrentResourceName = function() return 'gnsh-blackout' end
 RegisterCommand = function() end
+RegisterNetEvent = function() end
 dofile('server/main.lua')
 AddEventHandler = realAddEventHandler
 GetResourceState = realGetResourceState
 GetCurrentResourceName = realGetCurrentResourceName
 RegisterCommand = realRegisterCommand
+RegisterNetEvent = realRegisterNetEvent
 
 print('gnsh-blackout — pure Lua unit tests')
 print('')
@@ -121,6 +129,9 @@ dofile('tests/spec/validators_spec.lua')
 print('config_defaults_spec.lua')
 dofile('tests/spec/config_defaults_spec.lua')
 
+print('bridge_contract_spec.lua')
+dofile('tests/spec/bridge_contract_spec.lua')
+
 print('visual_profile_spec.lua')
 dofile('tests/spec/visual_profile_spec.lua')
 
@@ -135,6 +146,15 @@ dofile('tests/spec/world_placement_spec.lua')
 
 print('district_registry_spec.lua')
 dofile('tests/spec/district_registry_spec.lua')
+
+print('power_regions_spec.lua')
+dofile('tests/spec/power_regions_spec.lua')
+
+print('citywide_topology_spec.lua')
+dofile('tests/spec/citywide_topology_spec.lua')
+
+print('district_geometry_spec.lua')
+dofile('tests/spec/district_geometry_spec.lua')
 
 print('topology_spec.lua')
 dofile('tests/spec/topology_spec.lua')
@@ -168,6 +188,9 @@ dofile('tests/spec/admin_operations_spec.lua')
 
 print('restart_resync_spec.lua')
 dofile('tests/spec/restart_resync_spec.lua')
+
+print('audit_regression_spec.lua')
+dofile('tests/spec/audit_regression_spec.lua')
 
 print('integration_contract_spec.lua')
 dofile('tests/spec/integration_contract_spec.lua')

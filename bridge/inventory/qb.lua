@@ -1,42 +1,39 @@
---[[
-    bridge/inventory/qb.lua
-
-    Legacy qb-inventory adapter (via QBCore.Functions item helpers). Not
-    the active adapter on this server (ox_inventory is running), but kept
-    so the resource stays portable to servers still on qb-inventory
-    (RULE 8: core must not hard-depend on one inventory system).
-]]
+-- Legacy qb-inventory / framework-compatible item adapter.
 
 if not IsDuplicityVersion() then return end
 
 InventoryAdapters = InventoryAdapters or {}
-InventoryAdapters.qb = {}
+InventoryAdapters.qb_inventory = {}
+InventoryAdapters.qb = InventoryAdapters.qb_inventory -- old internal key
 
-local A = InventoryAdapters.qb
-local QBCore = nil
+local A = InventoryAdapters.qb_inventory
 
-local function core()
-    if not QBCore then
-        QBCore = exports['qb-core']:GetCoreObject()
-    end
-    return QBCore
+local function player(source)
+    local framework = FrameworkAdapters and FrameworkAdapters.qbcore
+    return framework and framework.GetPlayer and framework.GetPlayer(source) or nil
 end
 
 function A.HasItem(source, item, amount)
-    local Player = core().Functions.GetPlayer(source)
-    if not Player then return false end
-    return Player.Functions.GetItemByName(item) ~= nil
-        and (Player.Functions.GetItemByName(item).amount or 0) >= (amount or 1)
+    local p = player(source)
+    local fn = p and p.Functions and p.Functions.GetItemByName
+    local entry = type(fn) == 'function' and fn(item) or nil
+    if not entry then return false, 'item not found' end
+    return (tonumber(entry.amount or entry.count) or 0) >= (amount or 1)
 end
 
 function A.RemoveItem(source, item, amount)
-    local Player = core().Functions.GetPlayer(source)
-    if not Player then return false end
-    return Player.Functions.RemoveItem(item, amount or 1) == true
+    local p = player(source)
+    local fn = p and p.Functions and p.Functions.RemoveItem
+    if type(fn) ~= 'function' then return false, 'qb-inventory remove unavailable' end
+    local ok, result = pcall(fn, item, amount or 1)
+    return ok and result ~= false or false
 end
 
 function A.AddItem(source, item, amount)
-    local Player = core().Functions.GetPlayer(source)
-    if not Player then return false end
-    return Player.Functions.AddItem(item, amount or 1) == true
+    local p = player(source)
+    local fn = p and p.Functions and p.Functions.AddItem
+    if type(fn) ~= 'function' then return false, 'qb-inventory add unavailable' end
+    local ok, result = pcall(fn, item, amount or 1)
+    return ok and result ~= false or false
 end
+

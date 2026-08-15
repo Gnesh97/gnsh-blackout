@@ -14,13 +14,13 @@ InventoryAdapters.none = {}
 local A = InventoryAdapters.none
 
 function A.HasItem(_source, _item, _amount)
-    return false
+    return false, 'no inventory adapter configured'
 end
 
 function A.RemoveItem(_source, _item, _amount)
-    return false
+    return false, 'no inventory adapter configured'
 end
 
 function A.AddItem(_source, _item, _amount)
-    return false
+    return false, 'no inventory adapter configured'
 end

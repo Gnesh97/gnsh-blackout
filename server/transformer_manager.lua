@@ -117,7 +117,10 @@ function TransformerManager.RestoreState(row)
     rec.lastFailure = row.last_failure
     rec.lastRepair = row.last_repair
     rec.updatedAt = row.updated_at or os.time()
-    rec.revision = tonumber(row.revision) or rec.revision or 0
+    -- Revision is runtime-only. The transformer SQL table has no revision
+    -- column; interaction sessions receive the fresh runtime revision after
+    -- every boot instead of restoring a value that was never persisted.
+    rec.revision = rec.revision or 0
 end
 
 function TransformerManager.Exists(id)

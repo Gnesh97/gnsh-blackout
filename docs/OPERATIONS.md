@@ -44,3 +44,16 @@ snapshot and do not replay an old blackout transition.
   and incident lifecycle logs.
 - Enable bounded metrics only for a measurement window.
 - Perform live acceptance before changing the release candidate to `1.0.0`.
+
+## Bridge operations
+
+- Keep framework/inventory/target/database bridge values on `auto`; keep
+  `notify`, `menu`, `progress` and `skillcheck` on `nui` for the universal UI.
+- Run `/blackoutbridge` after `refresh`/`restart gnsh-blackout` and after
+  starting or stopping a framework, inventory, target or database resource.
+- `database=memory` means current-session operation only; it is not a SQL
+  replacement.
+- Verify sabotage/repair `requireItem` settings match selected inventory.
+  `none` intentionally fails item checks closed.
+- A target resource restart should produce one bridge rebuild and no duplicate
+  interactables. Provider errors must fall back to standalone/internal mode.

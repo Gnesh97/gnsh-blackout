@@ -1,5 +1,165 @@
 # CHANGELOG — gnsh-blackout (City Infrastructure)
 
+## [Unreleased]
+
+- Added the universal sabotage/repair NUI redesign for the FiveM gameplay flow:
+  transparent terminal-style presentation, Turkish UI copy, corrected success
+  feedback wrapping, and blackout-aware red `LINK UNSTABLE` status treatment.
+- Scoped the gameplay NUI to the relevant sabotage/repair interaction instead
+  of showing a persistent fullscreen panel; removed the unwanted opaque
+  `#121212` background and edge fade from the map presentation.
+- Added the admin operations NUI foundation with command-based opening, a
+  two-tab structure, and the first map tab built around the GTA V district map.
+  The map includes the native district overlay, adjusted map alignment,
+  district labels, hover/selection feedback, pan/zoom controls, and a cleaner
+  high-contrast infrastructure visual language.
+- Localized the NUI-facing labels, status messages, controls and completion
+  feedback to Turkish while preserving native district identifiers for logic
+  and diagnostics.
+- Added admin regional blackout controls for city, north, towns, south side,
+  Vinewood and related operational groupings. Regional actions now resolve all
+  districts in the selected region independently of transformer, feeder or
+  assigned-grid ownership.
+
+- Citywide native topology expansion (0.38.0-rc.2): all 90 native district
+  codes now have explicit single-grid and single-feeder ownership across 11
+  grids, 11 substations, 22 feeders and 22 transformers. The synthetic
+  `HARMOSUB` overlap-test zone is assigned separately and is not counted in
+  the native 90.
+- Added geometry-backed XY AABBs for the ten native codes that were missing
+  from the registry: `ALTA`, `BAYTRE`, `BHAMCA`, `DELSOL`, `EAST_V`, `GALLI`,
+  `LDAM`, `OBSERV`, `PALHIGH` and `PALMPOW`. Z ranges remain conservative;
+  no physical interaction point or prop was invented.
+- Added logical-only world records for the new grids, substations and
+  transformers. Existing Sandy/Central physical points remain enabled;
+  server API, admin, incident, persistence, replication and topology
+  validation cover every new logical target.
+- Expanded `tests/spec/citywide_topology_spec.lua` to verify all enabled
+  districts, unique feeder ownership and multi-feeder topology for every
+  configured grid. Lua 5.4.8 suite: 190 passed, 0 failed. Lua syntax scan:
+  121 files, 0 failures. Live citywide acceptance and verified physical
+  placements remain pending.
+- Corrected the mapped city boundary: the `city` operational region now
+  includes Tataviam Mountains (`TATAMO`) along with the full Los Santos area;
+  its AABB now uses the native geometry envelope as well. This does not merge
+  logical grids.
+- Improved standalone infrastructure interaction UX: external target resources
+  keep their native target menu, while the dependency-free fallback no longer
+  draws a large orange floor marker. It now shows one contextual 3D `[E]
+  Trafoyu incele` prompt only near the closest transformer.
+- Expanded bridge startup diagnostics to report framework, inventory, target,
+  notify, menu, progress, skillcheck, and database adapters; the startup line
+  now matches the full `/blackoutbridge` diagnostic output.
+- Fixed optional `ox_lib` adapter selection without reintroducing a hard
+  dependency. The bridge now validates and calls ox_lib's public resource
+  exports directly (`registerContext`, `showContext`, `notify`, `progressBar`
+  and `skillCheck`), with a safe internal fallback when an export is absent.
+- Fixed the explicit `ox_lib` skillcheck adapter so difficulty/input payloads
+  are normalized and a failed ox_lib call cannot silently fall through to the
+  permissive universal timed-bar adapter; the fallback is now strict native
+  input validation.
+- Fixed the `ox_lib` skillcheck export invocation to use its owner-bound `:`
+  contract. This prevents malformed difficulty data from rendering a full
+  target ring with a stalled indicator.
+- Interaction/bridge regression suite: `173 passed, 0 failed`; Lua 5.4.8 syntax
+  scan: 114 files, `SyntaxFailures=0`.
+- Audit follow-up kararları uygulandı: başarısız sabotage skillcheck'leri artık
+  yapılandırılmış sabotage item'ını tüketiyor; damage, incident ve success
+  cooldown üretmiyor. Recovery rollback refund yarışı, test `Log.debug` stub'ı,
+  Türkçe bildirimler ve native visual ownership lifecycle düzeltildi. Lua 5.4.8
+  suite sonucu: 165 passed, 0 failed.
+- Added the production branch, CI validation, release checklist, rollback notes, backup notes, and staging test matrix.
+- No gameplay behavior was changed by this release-management update.
+- Fixed a join-time fullscreen overlay by removing the internal `ui_page`.
+  Dependency-free UI fallback now uses GTA native help text, notifications
+  and controls without NUI focus or browser callbacks.
+- Fixed txAdmin master/admin users being rejected by /repairall when their
+  QBCore/ACE admin permission was not present. Server-local txAdmin
+  adminAuth and adminsUpdated signals now feed the centralized security
+  gateway; client network events cannot forge this authorization.
+- Added automatic txAdmin auth refresh through txAdmin's own
+  txsv:checkIfAdmin server flow, rate-limited and still validated only from
+  server-local adminAuth results.
+- Added txAdmin authorization regression coverage. Lua 5.4.8 suite result:
+  149 passed, 0 failed; Lua syntax scan: 110 files, 0 failures. Live
+  txAdmin /repairall acceptance remains pending.
+- Fixed command-specific ACE operators being rejected by `/repairall` and
+  other resource admin commands. `Security.RequireAdmin` now checks the
+  configured server-side `command`, `command.refresh` and `command.restart`
+  ACE permissions in addition to framework and txAdmin authorization.
+  Regression suite: 152 passed, 0 failed; live acceptance remains pending.
+- Fixed the `qb-menu` bridge callback contract. The installed qb-menu sends
+  `params.args` as one table; sabotage/repair actions now unpack that shape
+  (while retaining legacy two-argument compatibility), so selecting sabotage
+  reaches the server request and skillcheck stage.
+- Improved the dependency-free native skillcheck fallback with a visible
+  centered prompt showing the required key and remaining time. Bridge
+  regression suite: 154 passed, 0 failed; Lua syntax scan: 111 files, 0
+  failures.
+- Fixed the native skillcheck/target input collision: E and R are now
+  temporarily disabled for the target adapter during each skill stage and
+  read through the disabled-control API, preventing E from reopening the
+  sabotage menu between stages. Regression suite: 155 passed, 0 failed.
+- Fixed the `progressbar` bridge contract for repair stages. Generic
+  `disable` options are now translated to the resource's required
+  `controlDisables` shape, preventing repeated `Action.controlDisables` nil
+  errors during repair. Regression suite: 156 passed, 0 failed; Lua syntax
+  scan: 111 files, 0 failures.
+- Fixed inventory item consumption through the universal bridge. The
+  `ox_inventory` mutating exports now use the correct export contract;
+  sabotage aborts when its item cannot be removed, and repair revalidates
+  and consumes all condition materials at the final stage with rollback on a
+  partial removal. Regression suite: 158 passed, 0 failed; Lua syntax scan:
+  111 files, 0 failures.
+
+- Applied MP test code-audit hardening. Replication now advances its startup
+  baseline above revisions already published in StateBags; restored incident
+  severity is normalized to numeric values; repair completion checks state and
+  damage mutations and refunds consumed materials on rollback; failed sabotage
+  skillchecks do not consume items or start cooldown; runtime-only transformer
+  revisions are no longer read from the SQL row; bridge diagnostics use the
+  correct server/client Notify signature; and profiles honor
+  `nativeBlackout.enabled`.
+- Added `tests/spec/audit_regression_spec.lua` covering restart revision
+  monotonicity, mixed persisted/new incident severity, repair rollback, and
+  failed sabotage side effects. Lua 5.4.8 regression suite: 165 passed, 0
+  failed.
+- Updated `docs/MULTIPLAYER_ACCEPTANCE_TESTS.md` with the debug convar setup and
+  cleanup, explicit C4 usage for blackout scenarios, the physical location
+  note for `blaine_south_tr_02`, and the corrected `apiquery` output contract.
+- `apiquery` now sends its encoded result to the invoking player's F8 console
+  and includes `source=<playerId>` in the server log.
+- Lua 5.4.8 syntax scan: 112 Lua files checked, 0 failures.
+- Added final repair recovery rollback/refund handling, sabotage session cleanup
+  on stale/distance/completion rejection, and native visual cleanup when the
+  destination profile disables native blackout. Regression coverage now also
+  covers those three paths.
+
+## Universal Bridge RC - 2026-08-11
+
+Universal FiveM conversion applied according to `C:\Users\Gnesh\Desktop\plan.md`.
+
+- Removed hard `ox_lib`, MenuV, `ox_inventory` and `oxmysql` dependencies and
+  direct imports from `fxmanifest.lua`.
+- Added atomic bridge snapshots, alias normalization, adapter contract checks,
+  explicit fallback logging, `/blackoutbridge`, resource start/stop rebuild and
+  target interactable rebind without duplicate zones.
+- Added QBCore, Qbox, ESX Legacy and standalone framework adapters.
+- Added ox/qs/ps/qb/framework/none inventory adapters and ox/qb/qtarget/
+  standalone target adapters.
+- Added notify, menu, progress, skillcheck and database adapter categories.
+- Added dependency-free native fallback for menu, notification, cancelable
+  progress and keyboard skillcheck. Server sessions remain authoritative.
+- Moved gameplay UI and persistence behind Bridge contracts. oxmysql uses
+  documented async exports; memory fallback keeps runtime operational without
+  SQL and intentionally does not survive restart.
+- Added `tests/spec/bridge_contract_spec.lua`; pure Lua suite now reports
+  `146 passed, 0 failed` with Lua 5.4.8. Lua syntax scan: 110 files,
+  `SyntaxFailures=0`.
+- Live compatibility tests for Qbox, ESX, qs/ps inventory, ox_target and
+  no-dependency standalone stack remain pending. Phase 35 final acceptance
+  stays blocked until those stacks and deferred multiplayer tests are accepted.
+
 Bu dosya `CITY INFRASTRUCTURE (1).md` (Master Specification V3) spec'inin
 uygulama planına göre, aşama aşama (phase-by-phase) proje durumunu takip
 eder. Format: her phase kendi bölümü, o phase **tamamlandığında** yazılır.
@@ -1572,6 +1732,36 @@ release remain pending until the user completes the live matrix.
   `luac -p`; delimiter/whitespace scan passed.
 - [ ] Phase 35 final acceptance remains pending: SQL import verification and
   user live acceptance, including the deferred multiplayer matrix.
+
+## Phase 35 Single-Player Acceptance Update - 2026-08-12
+
+- [x] SQL-backed restart restore: after `restart gnsh-blackout`, the active
+  sabotage for `sandy_tr_01` remained `OFFLINE/DESTROYED` and its active
+  `SABOTAGE` incident was restored without a duplicate-key or server error.
+- [x] Post-restart repair/recovery: `sandy_tr_01` returned to
+  `ONLINE/HEALTHY` with `damage=0`; `/apiquery incidents` returned `[]`, and
+  both `SANDY` and `blaine_south` returned `ONLINE`.
+- [x] Independent-grid isolation remained valid: `ls_central` stayed
+  `ONLINE` throughout the Sandy persistence/recovery test.
+- [x] Final single-player clean restart/resync: after `refresh` and
+  `restart gnsh-blackout`, all three transformers were
+  `ONLINE/HEALTHY/damage=0`, `/apiquery incidents` returned `[]`, and both
+  `blaine_south` and `ls_central` returned `ONLINE` with `level=1.0`.
+- [ ] Multiplayer acceptance remains intentionally deferred to the final
+  test stage; Phase 35 and the `1.0.0` release are not closed yet.
+
+## Phase 35 Single-Player Regression Update - 2026-08-13
+
+- [x] Failed sabotage skillcheck consumed one C4 item while leaving
+  `sandy_tr_01` `ONLINE/HEALTHY/damage=0` and creating no incident.
+- [x] Successful sabotage created one `SABOTAGE` incident for
+  `sandy_tr_01`; normal repair completed and recovery returned SANDY to
+  `ONLINE/powered=true/level=1.0`.
+- [x] Final `/apiquery path SANDY` returned `ONLINE`, `/apiquery incidents`
+  returned `[]`, and all three transformers were
+  `ONLINE/HEALTHY/damage=0`.
+- [ ] Multiplayer acceptance remains pending; next test is MP-01 state
+  synchronization and district isolation.
 
 ## Repair Restart Hotfix - 2026-08-10
 

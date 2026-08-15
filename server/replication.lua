@@ -27,8 +27,9 @@
     need a batched-transaction wrapper this phase doesn't add (documented
     simplification, see CHANGELOG Phase 18).
 
-    Replication.Init() force-publishes the STARTING snapshot (revision 0)
-    for every grid/feeder/district unconditionally. The Recalculate*()
+    Replication.Init() force-publishes the STARTING snapshot with a revision
+    above any value already visible in GlobalState for every grid/feeder/
+    district unconditionally. The Recalculate*()
     functions are the steady-state path: each is a no-op (no revision
     bump, no publish) if the freshly computed state is identical to
     what's already published — "no change, no write" (spec §46).
@@ -40,6 +41,34 @@ local gridStates = {}      -- [gridId] = Types.NewGridState(...) snapshot (last 
 local feederStates = {}    -- [feederId] = Types.NewFeederState(...) snapshot (last published)
 local districtStates = {}  -- [district] = Types.NewDistrictState(...) snapshot (last published)
 local revisionCounter = 0
+
+-- StateBag values can survive a resource restart while this Lua VM does not.
+-- Start every new publication baseline above the highest revision already
+-- visible in GlobalState, otherwise clients that kept their local snapshot
+-- can discard freshly restored state as stale.
+local function publishedRevisionFloor()
+    local highest = 0
+
+    local function inspect(prefix, ids)
+        for _, id in ipairs(ids or {}) do
+            local ok, state = pcall(function()
+                return GlobalState and GlobalState[prefix .. id]
+            end)
+            local revision = ok and state and tonumber(state.revision) or nil
+            if revision and revision > highest then
+                highest = revision
+            end
+        end
+    end
+
+    inspect(Constants.StateKey.GRID, GridManager.GetAllGridIds())
+    inspect(Constants.StateKey.FEEDER, GridManager.GetAllFeederIds())
+
+    local districtIds = Districts and Districts.GetAllEnabled and Districts.GetAllEnabled() or {}
+    inspect(Constants.StateKey.DISTRICT, districtIds)
+
+    return highest
+end
 
 local function sameBlockedBy(a, b)
     if a == b then return true end
@@ -157,6 +186,19 @@ local function computeDistrictState(districtCode)
     local feederIds = GridManager.GetFeedersForDistrict(districtCode)
     table.sort(feederIds)
 
+    local regionBlocker = FailureManager
+        and FailureManager.GetBlockingAncestor(Constants.ComponentType.DISTRICT, districtCode)
+    if regionBlocker then
+        return {
+            powered = false,
+            level = 0.0,
+            status = Constants.GridStatus.BLACKOUT,
+            feederIds = copyList(feederIds),
+            sourceFeederId = feederIds[1],
+            blockedBy = regionBlocker,
+        }
+    end
+
     if #feederIds > 0 then
         local supply = {}
         for _, feederId in ipairs(feederIds) do
@@ -197,7 +239,7 @@ function Replication.Init()
     gridStates = {}
     feederStates = {}
     districtStates = {}
-    revisionCounter = 0
+    revisionCounter = math.max(revisionCounter or 0, publishedRevisionFloor()) + 1
 
     for _, gridId in ipairs(GridManager.GetAllGridIds()) do
         local grid = Grids[gridId]
@@ -228,20 +270,17 @@ function Replication.Init()
     -- Districts computed AFTER grids/feeders above are both populated —
     -- computeDistrictState() needs gridStates for its no-feeder fallback
     -- path and calls FeederManager.GetState() fresh for its feeder path.
-    for _, gridId in ipairs(GridManager.GetAllGridIds()) do
-        local grid = Grids[gridId]
-        for _, code in ipairs(grid.districts) do
-            local result = computeDistrictState(code)
-            local districtState = Types.NewDistrictState(code, {
-                gridId = gridId,
-                feederIds = copyList(result.feederIds),
-                sourceFeederId = result.sourceFeederId,
-                powered = result.powered, level = result.level, status = result.status,
-                blockedBy = result.blockedBy, revision = revisionCounter,
-            })
-            districtStates[code] = districtState
-            publishDistrict(districtState)
-        end
+    for _, code in ipairs(Districts.GetAllEnabled()) do
+        local result = computeDistrictState(code)
+        local districtState = Types.NewDistrictState(code, {
+            gridId = GridManager.GetGridForDistrict(code),
+            feederIds = copyList(result.feederIds),
+            sourceFeederId = result.sourceFeederId,
+            powered = result.powered, level = result.level, status = result.status,
+            blockedBy = result.blockedBy, revision = revisionCounter,
+        })
+        districtStates[code] = districtState
+        publishDistrict(districtState)
     end
 end
 
@@ -292,15 +331,11 @@ end
 function Replication.RecalculateDistrict(districtCode, reason)
     if Metrics then Metrics.Inc('server.recalculate.district') end
     local old = districtStates[districtCode]
-    if not old then
-        Log.warn('RecalculateDistrict called before Replication.Init() established a baseline', { district = districtCode })
-        return
-    end
-
     local result = computeDistrictState(districtCode)
 
     local gridId = GridManager.GetGridForDistrict(districtCode)
-    if old.powered == result.powered and old.level == result.level and old.status == result.status
+    if old
+        and old.powered == result.powered and old.level == result.level and old.status == result.status
         and old.gridId == gridId
         and old.sourceFeederId == result.sourceFeederId
         and sameList(old.feederIds, result.feederIds)
@@ -308,7 +343,11 @@ function Replication.RecalculateDistrict(districtCode, reason)
         return
     end
 
-    revisionCounter = revisionCounter + 1
+    if not old then
+        Log.warn('RecalculateDistrict created a missing district baseline', { district = districtCode })
+    end
+
+    revisionCounter = (revisionCounter or 0) + 1
 
     local newDistrictState = Types.NewDistrictState(districtCode, {
         gridId = gridId,

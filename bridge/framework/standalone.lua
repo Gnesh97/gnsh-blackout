@@ -55,6 +55,10 @@ if IsDuplicityVersion() then
     end
 else
     -- ── Client ──────────────────────────────────────────────────────────
+    function A.GetPlayerData()
+        return {}
+    end
+
     function A.Notify(message, _type)
         TriggerEvent('chat:addMessage', {
             args = { '[Infrastructure]', message },

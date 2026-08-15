@@ -23,6 +23,24 @@ local function isFiniteNumber(value)
         and value ~= -math.huge
 end
 
+local function validateBridge(errors)
+    local config = Config.Bridge
+    if type(config) ~= 'table' then
+        addError(errors, 'Config.Bridge must be a table')
+        return
+    end
+
+    local categories = { 'framework', 'inventory', 'target', 'notify', 'menu', 'progress', 'skillcheck', 'database' }
+    for _, category in ipairs(categories) do
+        local value = config[category]
+        if type(value) ~= 'string' then
+            addError(errors, 'Config.Bridge.%s must be a string', category)
+        elseif BridgeCore and not BridgeCore.Normalize(category, value) then
+            addError(errors, 'Config.Bridge.%s has unknown adapter value %s', category, tostring(value))
+        end
+    end
+end
+
 local function validateRandomFailure(errors)
     local config = Config.RandomFailure
     if type(config) ~= 'table' then
@@ -76,6 +94,31 @@ local function validateSecurity(errors)
 
     if type(config.enabled) ~= 'boolean' then
         addError(errors, 'Config.Security.enabled must be boolean')
+    end
+
+    if type(config.txAdmin) ~= 'boolean' then
+        addError(errors, 'Config.Security.txAdmin must be boolean')
+    end
+
+    if type(config.allowCommandAceAdmins) ~= 'boolean' then
+        addError(errors, 'Config.Security.allowCommandAceAdmins must be boolean')
+    end
+
+    if type(config.commandAcePermissions) ~= 'table' then
+        addError(errors, 'Config.Security.commandAcePermissions must be a table')
+    else
+        local permissionCount = 0
+        for index, permission in pairs(config.commandAcePermissions) do
+            if type(index) ~= 'number' or math.floor(index) ~= index
+                or type(permission) ~= 'string' or permission == '' then
+                addError(errors, 'Config.Security.commandAcePermissions entries must be non-empty strings')
+            else
+                permissionCount = permissionCount + 1
+            end
+        end
+        if permissionCount == 0 then
+            addError(errors, 'Config.Security.commandAcePermissions must contain at least one permission')
+        end
     end
 
     local numbers = {
@@ -461,22 +504,39 @@ local function validateWorldPlacement(errors)
                 addError(errors, "world point '%s' has invalid type '%s'", logicalId, tostring(point.type))
             end
 
-            if not validCoords(point.coords) then
-                addError(errors, "world point '%s' has invalid coords", logicalId)
-            else
-                for otherId, otherCoords in pairs(seenCoordinates) do
-                    if Utils.Distance3D(point.coords, otherCoords) < 0.5 then
-                        addError(errors, "world points '%s' and '%s' are duplicate/too close", logicalId, otherId)
+            if type(point.physical) ~= 'boolean' then
+                addError(errors, "world point '%s' needs boolean physical", logicalId)
+            elseif point.physical then
+                if not validCoords(point.coords) then
+                    addError(errors, "world point '%s' has invalid coords", logicalId)
+                else
+                    for otherId, otherCoords in pairs(seenCoordinates) do
+                        if Utils.Distance3D(point.coords, otherCoords) < 0.5 then
+                            addError(errors, "world points '%s' and '%s' are duplicate/too close", logicalId, otherId)
+                        end
                     end
+                    seenCoordinates[logicalId] = point.coords
                 end
-                seenCoordinates[logicalId] = point.coords
+            elseif point.coords ~= nil then
+                addError(errors, "logical-only world point '%s' cannot have coords", logicalId)
+            end
+
+            if type(point.enabled) ~= 'boolean' then
+                addError(errors, "world point '%s' needs boolean enabled", logicalId)
+            elseif not point.physical and point.enabled then
+                addError(errors, "logical-only world point '%s' cannot be enabled", logicalId)
+            end
+
+            if not point.physical and point.model ~= nil then
+                addError(errors, "logical-only world point '%s' cannot have a model", logicalId)
+            end
+
+            if point.physical and point.model == nil and point.type == 'transformer' then
+                addError(errors, "physical transformer '%s' needs a model", logicalId)
             end
 
             if not validNumber(point.heading) then
                 addError(errors, "world point '%s' has invalid heading", logicalId)
-            end
-            if type(point.enabled) ~= 'boolean' then
-                addError(errors, "world point '%s' needs boolean enabled", logicalId)
             end
             if type(point.interactionRadius) ~= 'number' or point.interactionRadius <= 0 then
                 addError(errors, "world point '%s' needs positive interactionRadius", logicalId)
@@ -510,7 +570,7 @@ local function validateWorldPlacement(errors)
                             addError(errors, "world transformer '%s' is not claimed by feeder '%s'", logicalId, point.feederId)
                         end
                     end
-                    if type(point.model) ~= 'string' or point.model == '' then
+                    if point.physical and (type(point.model) ~= 'string' or point.model == '') then
                         addError(errors, "world transformer '%s' needs a non-empty expected model name", logicalId)
                     end
                 end
@@ -546,12 +606,12 @@ local function validateWorldPlacement(errors)
     end
 
     for substationId in pairs(Substations) do
-        if not expectedIds[substationId] then
+        if Substations[substationId].physical ~= false and not expectedIds[substationId] then
             addError(errors, "substation '%s' has no world placement", substationId)
         end
     end
     for transformerId in pairs(Transformers) do
-        if not expectedIds[transformerId] then
+        if Transformers[transformerId].physical ~= false and not expectedIds[transformerId] then
             addError(errors, "transformer '%s' has no world placement", transformerId)
         end
     end
@@ -568,6 +628,7 @@ function Validators.ValidateAll()
     validateDistrictRegistry(errors, warnings)
     validateFeederTopology(errors, warnings)
     validateWorldPlacement(errors)
+    validateBridge(errors)
     validateRandomFailure(errors)
     validateDebug(errors)
     validateSecurity(errors)

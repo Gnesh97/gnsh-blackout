@@ -7,6 +7,11 @@
     placement. Network entity ids are intentionally absent. `model` is an
     optional expected map model used by client-side validation, never an
     identity and never an instruction to spawn a prop.
+
+    Logical-only topology entries are retained in this registry with
+    physical=false and enabled=false when no verified world placement exists.
+    They remain available to server topology, incidents, API and admin
+    operations without creating fake interaction coordinates.
 ]]
 
 InfrastructureWorld = {}
@@ -97,6 +102,8 @@ end
 for substationId, substation in pairs(Substations) do
     local gridId = findGridForSubstation(substationId)
     local placement = placements[substationId] or {}
+    local physical = placement.physical == true
+        or (placement.physical == nil and substation.physical ~= false and placement.coords ~= nil)
 
     InfrastructureWorld[substationId] = {
         logicalId = substationId,
@@ -104,12 +111,13 @@ for substationId, substation in pairs(Substations) do
         gridId = gridId,
         substationId = substationId,
         feederId = nil,
-        coords = placement.coords,
+        coords = physical and placement.coords or nil,
         heading = placement.heading or 0.0,
-        model = placement.model,
+        model = physical and placement.model or nil,
         interactionRadius = placement.interactionRadius or 8.0,
         visualRadius = placement.visualRadius or 15.0,
-        enabled = placement.enabled ~= false,
+        physical = physical,
+        enabled = physical and placement.enabled ~= false or false,
         expectedDistricts = districtsForSubstation(substationId, gridId),
     }
 end
@@ -119,6 +127,8 @@ for transformerId, transformer in pairs(Transformers) do
     local gridId = findGridForSubstation(substationId)
     local feederId, feeder = findFeederForTransformer(transformerId)
     local placement = placements[transformerId] or {}
+    local physical = placement.physical == true
+        or (placement.physical == nil and transformer.physical ~= false and placement.coords ~= nil)
     local expectedDistricts = {}
 
     if feeder then
@@ -139,12 +149,13 @@ for transformerId, transformer in pairs(Transformers) do
         gridId = gridId,
         substationId = substationId,
         feederId = feederId,
-        coords = placement.coords,
+        coords = physical and placement.coords or nil,
         heading = placement.heading or 0.0,
-        model = placement.model,
+        model = physical and placement.model or nil,
         interactionRadius = placement.interactionRadius or 6.0,
         visualRadius = placement.visualRadius or 15.0,
-        enabled = placement.enabled ~= false,
+        physical = physical,
+        enabled = physical and placement.enabled ~= false or false,
         expectedDistricts = expectedDistricts,
     }
 end

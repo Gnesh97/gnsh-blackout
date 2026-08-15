@@ -39,3 +39,44 @@ this resource.
 `Config.Bridge` supports auto-detection or explicit framework, inventory and
 target adapters. A missing soft dependency must resolve to a safe fallback;
 bridge code must not be called directly by integration consumers.
+
+## Universal adapter selection
+
+Use `Config.Bridge.*` for explicit selection when automatic priority is not
+desired. Supported framework values are `qbox`, `qbcore`, `esx` and
+`standalone`; inventory values are `ox_inventory`, `qs_inventory`,
+`ps_inventory`, `qb_inventory`, `framework` and `none`; target values are
+`ox_target`, `qb_target`, `qtarget`, `standalone`, `textui` and `none`.
+Notify/menu/progress/skillcheck/database categories expose resource-owned
+`nui` first, then `internal`, `ox_lib`, `qb_menu`, `menuv`, `progressbar`,
+`qb_lock`, `oxmysql` and `memory` where applicable. With `auto`, the client UI
+categories therefore stay identical across QBCore, Qbox, ESX and standalone.
+Legacy aliases are normalized.
+
+Run `/blackoutbridge` after boot or after a provider restart. Output shows
+active adapters, capabilities and fallback reasons. Consumers must use public
+exports/events and must not call vendor APIs through this resource.
+
+## Stack examples
+
+```lua
+-- QBCore + ox inventory/target + SQL
+Config.Bridge.framework = 'qbcore'
+Config.Bridge.inventory = 'ox_inventory'
+Config.Bridge.target = 'ox_target'
+Config.Bridge.database = 'oxmysql'
+
+-- Standalone, no third-party UI or SQL
+Config.Bridge.framework = 'standalone'
+Config.Bridge.inventory = 'none'
+Config.Bridge.target = 'standalone'
+Config.Bridge.menu = 'nui'
+Config.Bridge.progress = 'nui'
+Config.Bridge.skillcheck = 'nui'
+Config.Bridge.database = 'memory'
+Config.Sabotage.requireItem = false
+Config.Repair.requireItem = false
+```
+
+The standalone example still uses server-owned sessions, distance, revision
+and rate-limit checks. Memory persistence is volatile by design.

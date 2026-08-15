@@ -37,6 +37,17 @@
 -- VisualManager to snap straight to the correct state instead of playing
 -- the Phase 15 explosion/flicker sequence for something that already
 -- happened.
+local function publishLinkStatus(powered)
+    if type(SendNUIMessage) ~= 'function' then return end
+
+    local stable = powered == true
+    SendNUIMessage({
+        action = 'linkStatus',
+        powered = stable,
+        unstable = not stable,
+    })
+end
+
 local function applyDistrictState(districtId, gridId, instant)
     ClientState.CurrentDistrict = districtId
     ClientState.CurrentGrid = gridId
@@ -47,6 +58,7 @@ local function applyDistrictState(districtId, gridId, instant)
         -- per the same fail-open rule the server API uses.
         ClientState.CurrentPowerRevision = -1
         ClientState.CurrentPowered = true
+        publishLinkStatus(true)
         TriggerEvent('infra:powerStateChanged', {
             gridId = gridId, districtId = nil, feederIds = {}, sourceFeederId = nil,
             powered = true, level = 1.0, status = Constants.GridStatus.ONLINE,
@@ -63,6 +75,7 @@ local function applyDistrictState(districtId, gridId, instant)
         -- than assume blackout.
         ClientState.CurrentPowerRevision = -1
         ClientState.CurrentPowered = true
+        publishLinkStatus(true)
         TriggerEvent('infra:powerStateChanged', {
             gridId = gridId, districtId = districtId, feederIds = {}, sourceFeederId = nil,
             powered = true, level = 1.0, status = Constants.GridStatus.ONLINE,
@@ -74,6 +87,7 @@ local function applyDistrictState(districtId, gridId, instant)
     ClientState.CurrentPowerRevision = state.revision
     ClientState.CurrentPowered = state.powered
     ClientState.CurrentFeeder = state.sourceFeederId
+    publishLinkStatus(state.powered)
 
     local payload = {}
     for k, v in pairs(state) do payload[k] = v end
@@ -106,6 +120,7 @@ AddStateBagChangeHandler(nil, 'global', function(bagName, key, value)
         ClientState.CurrentPowerRevision = value.revision
         ClientState.CurrentPowered = value.powered
         ClientState.CurrentFeeder = value.sourceFeederId
+        publishLinkStatus(value.powered)
 
         local payload = {}
         for k, v in pairs(value) do payload[k] = v end
@@ -121,8 +136,22 @@ RegisterNetEvent('gnsh-blackout:client:resyncVisual', function()
     applyDistrictState(ClientState.CurrentDistrict, ClientState.CurrentGrid, true)
 end)
 
+RegisterNetEvent('gnsh-blackout:client:adminOpen', function(payload)
+    if not AdminUI or type(AdminUI.Open) ~= 'function' then return end
+    AdminUI.Open(payload)
+end)
+
+RegisterNetEvent('gnsh-blackout:client:adminData', function(payload)
+    if not AdminUI or type(AdminUI.Update) ~= 'function' then return end
+    AdminUI.Update(payload)
+end)
+
 local function start()
     if Metrics and Metrics.Start then Metrics.Start() end
+    -- SetArtificialLightsState is client-global and its native state can
+    -- outlive a resource reload even though NativeBlackout's Lua flag resets.
+    -- Clear the stale visual before applying the authoritative snapshot below.
+    if NativeBlackout and NativeBlackout.Reset then NativeBlackout.Reset() end
     DistrictManager.Start()
     applyDistrictState(ClientState.CurrentDistrict, ClientState.CurrentGrid, true) -- late-join / resource-(re)start snapshot read
 end

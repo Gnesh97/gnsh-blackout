@@ -63,6 +63,21 @@ TEST('unknown parent target is rejected', function()
     ASSERT_FALSE(ok, 'unknown feeder must be rejected')
 end)
 
+TEST('region override blocks unassigned districts without topology', function()
+    local region = PowerRegions.Get('towns')
+    local district = 'GRAPES'
+
+    FailureManager.Restore('region', region.id, 'unit-reset', 0)
+    local ok = FailureManager.SetState('region', region.id, 'OFFLINE', 'unit-test', 0)
+    ASSERT_TRUE(ok, 'region override should be accepted without feeder assignments')
+
+    local blocker = FailureManager.GetBlockingAncestor('district', district)
+    ASSERT_EQ(blocker.type, 'region', 'unassigned district must be blocked by region')
+    ASSERT_EQ(blocker.id, region.id, 'region blocker id must match')
+
+    FailureManager.Restore('region', region.id, 'unit-test', 0)
+end)
+
 Grids = originalGrids
 Substations = originalSubstations
 Feeders = originalFeeders

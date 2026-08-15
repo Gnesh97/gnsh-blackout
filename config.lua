@@ -15,12 +15,26 @@ Config = {}
 
 -- ── Bridge (spec §55, §56) ──────────────────────────────────────────────
 -- 'auto' probes GetResourceState() for known resources at startup and
--- falls back to the standalone adapter if none are running. Set an
--- explicit value to skip detection.
+-- falls back to the standalone adapter if none are running. The UI categories
+-- stay explicit so framework-owned native screens cannot replace the resource
+-- UI. Set an explicit provider only when an intentional override is needed.
 Config.Bridge = {
-    framework = 'auto',   -- 'auto' | 'qbcore' | 'standalone'
-    inventory = 'auto',   -- 'auto' | 'ox_inventory' | 'qb-inventory' | 'none'
-    target = 'auto',      -- 'auto' | 'qb-target' | 'textui' | 'none'
+    framework = 'auto',
+    inventory = 'auto',
+    target = 'auto',
+    notify = 'nui',
+    menu = 'nui',
+    progress = 'nui',
+    skillcheck = 'nui',
+    database = 'auto',
+}
+
+-- Standalone interaction presentation. External target adapters keep their
+-- own target UI; these values only affect the dependency-free fallback.
+Config.Interaction = {
+    standalonePromptDistance = 2.5,
+    standalonePromptHeight = 0.85,
+    standalonePromptScale = 0.32,
 }
 
 -- ── Debug / logging ──────────────────────────────────────────────────────
@@ -52,6 +66,24 @@ Config.District = {
     moveThreshold = 5.0,    -- metres of movement required since last poll before re-checking zone
     stableTime = 350,       -- ms a candidate district must hold before it's committed (hysteresis)
     teleportThreshold = 150.0, -- metres moved in one tick that forces an immediate re-resolve
+}
+
+-- One-time development exporter for the admin map's native district layer.
+-- It is available only while Config.IsDebugEnabled() is true and the caller
+-- passes the normal server-side admin permission check. Runtime gameplay and
+-- opening the admin panel never trigger a scan.
+Config.DistrictMapExport = {
+    enabled = true,
+    command = 'districtscan',
+    cancelCommand = 'districtscancancel',
+    outputPath = 'web/assets/gta-native-districts.json',
+    bounds = { minX = -3430, maxX = 3990, minY = -3560, maxY = 7160 },
+    cellSize = 10,
+    sampleZ = 0.0,
+    callsPerFrame = 1200,
+    latentBps = 1000000,
+    maxPayloadBytes = 8 * 1024 * 1024,
+    maxGeometryItems = 1000000,
 }
 
 -- ── Zone resolver priority (spec §9, §50) ───────────────────────────────
@@ -120,6 +152,13 @@ Config.RandomFailure = {
 
 Config.Security = {
     enabled = true,
+    txAdmin = true,
+    allowCommandAceAdmins = true, -- global FXServer command operators may use infrastructure admin commands
+    commandAcePermissions = {
+        'command',
+        'command.refresh',
+        'command.restart',
+    },
     maxStringLength = 64,
     rateWindowSec = 10,
     maxEventsPerWindow = 20,

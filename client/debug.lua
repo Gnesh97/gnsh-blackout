@@ -10,6 +10,15 @@
 
 if not Config.IsDebugEnabled() then return end
 
+RegisterNetEvent('gnsh-blackout:client:apiQueryResult', function(encoded, err)
+    if err then
+        print('^1[gnsh-blackout] API error: ' .. tostring(err) .. '^7')
+        return
+    end
+
+    print('[gnsh-blackout] API result: ' .. tostring(encoded))
+end)
+
 RegisterCommand('showdistrict', function()
     local label = ClientState.CurrentDistrict and Districts.GetLabel(ClientState.CurrentDistrict) or 'bilinmiyor'
     print(('[gnsh-blackout] District: %s (%s)  Grid: %s  Commits: %d'):format(
