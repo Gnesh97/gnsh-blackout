@@ -1,5 +1,8 @@
 # gnsh-blackout
 
+[![Validate FiveM resource](https://github.com/Gnesh97/gnsh-blackout/actions/workflows/validate.yml/badge.svg)](https://github.com/Gnesh97/gnsh-blackout/actions/workflows/validate.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 ## Universal City Infrastructure for FiveM
 
 <code>gnsh-blackout</code> turns electricity into a first-class, server-authoritative
@@ -305,6 +308,4 @@ forcing a gameplay rewrite.
 
 ## License
 
-Review the distribution license before deployment. Deployment owners
-are responsible for confirming the licensing terms of this resource and all
-third-party assets used with it.
+Licensed under the [MIT License](LICENSE). Review the license terms of any third-party assets used alongside this resource before deployment.
